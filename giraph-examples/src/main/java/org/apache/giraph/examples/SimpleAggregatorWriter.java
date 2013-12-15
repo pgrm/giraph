@@ -20,23 +20,23 @@ package org.apache.giraph.examples;
 
 import java.io.IOException;
 import java.util.Map.Entry;
+
 import org.apache.giraph.aggregators.AggregatorWriter;
 import org.apache.giraph.conf.DefaultImmutableClassesGiraphConfigurable;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 
 /**
- * This is a simple example for an aggregator writer. After each superstep
- * the writer will persist the aggregator values to disk, by use of the
- * Writable interface. The file will be created on the current working
- * directory.
+ * This is a simple example for an aggregator writer. After each superstep the
+ * writer will persist the aggregator values to disk, by use of the Writable
+ * interface. The file will be created on the current working directory.
  */
 public class SimpleAggregatorWriter extends
-    DefaultImmutableClassesGiraphConfigurable implements
-    AggregatorWriter {
+    DefaultImmutableClassesGiraphConfigurable implements AggregatorWriter {
   /** Name of the file we wrote to */
   private static String FILENAME;
   /** Saved output stream to write to */
@@ -49,7 +49,7 @@ public class SimpleAggregatorWriter extends
   @SuppressWarnings("rawtypes")
   @Override
   public void initialize(Context context, long applicationAttempt)
-    throws IOException {
+      throws IOException {
     setFilename(applicationAttempt);
     Path p = new Path(FILENAME);
     FileSystem fs = FileSystem.get(context.getConfiguration());
@@ -58,18 +58,20 @@ public class SimpleAggregatorWriter extends
 
   /**
    * Set filename written to
-   *
-   * @param applicationAttempt app attempt
+   * 
+   * @param applicationAttempt
+   *          app attempt
    */
   private static void setFilename(long applicationAttempt) {
     FILENAME = "aggregatedValues_" + applicationAttempt;
   }
 
   @Override
-  public void writeAggregator(
-      Iterable<Entry<String, Writable>> aggregatorMap,
+  public void writeAggregator(Iterable<Entry<String, Writable>> aggregatorMap,
       long superstep) throws IOException {
     for (Entry<String, Writable> entry : aggregatorMap) {
+      Text t = new Text("SuperStep=" + entry.getKey() + ".Energy= ");
+      t.write(output);
       entry.getValue().write(output);
     }
     output.flush();
