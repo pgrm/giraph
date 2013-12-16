@@ -57,11 +57,6 @@ public class JaBeJaConfigurations {
   private static final int DEFAULT_RANDOM_SEED = 0;
 
   /**
-   * Default value if the complex or simple color exchange should be used
-   */
-  private static final boolean USE_COMPLEX_COLOR_EXCHANGE_DEFAULT = false;
-
-  /**
    * Configuration to read values from, defined as member,
    * so it's not necessary to pass it on as an argument to all the functions.
    */
@@ -128,17 +123,6 @@ public class JaBeJaConfigurations {
   public double getCoolingFactor() {
     return (double) this.conf.getFloat(
       "JaBeJa.CoolingFactor", DEFAULT_COOLING_FACTOR);
-  }
-
-  /**
-   * Define if only direct matches should exchange colors or,
-   * in case of no direct match, a negotiation about the exchange should happen
-   *
-   * @return flag if the complex color exchange should be used
-   */
-  public boolean useComplexColorExchange() {
-    return this.conf.getBoolean("JaBeJa.UseComplexColorExchange",
-      USE_COMPLEX_COLOR_EXCHANGE_DEFAULT);
   }
 
   /**

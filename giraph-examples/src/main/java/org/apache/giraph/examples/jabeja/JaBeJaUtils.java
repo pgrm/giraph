@@ -17,12 +17,17 @@
  */
 package org.apache.giraph.examples.jabeja;
 
+import org.apache.log4j.Logger;
+
 import java.util.Random;
 
 /**
  *
  */
 public class JaBeJaUtils {
+  /** logger */
+  private static final Logger LOG = Logger.getLogger(JaBeJaUtils.class);
+
   /**
    * Hiding default constructor
    */
@@ -51,12 +56,66 @@ public class JaBeJaUtils {
     if (configuredSeed == -1) {
       randomGenerator = new Random();
     } else {
-      long seed = JaBeJaUtils.calculateLongHashCode(String.format("%d#%d#%d",
-        configuredSeed, superstep, vertexId));
+      long seed = getMixedUpSeed(configuredSeed, superstep, vertexId);
+      LOG.trace("Initializing random generator with the seed " + seed);
       randomGenerator = new Random(seed);
     }
 
     return randomGenerator;
+  }
+
+  /**
+   * creates a seed which should be as diverse as possible to have a
+   * reproducible random function per node and per superstep
+   *
+   * @param configuredSeed the seed configured by the user
+   * @param superstep      the current superstep of giraph
+   * @param vertexId       the id of the current vertex
+   * @return seed which can be used to create a new Random-generator instance
+   */
+  private static long getMixedUpSeed(
+    int configuredSeed, long superstep, long vertexId) {
+    long firstValue = 0;
+    long secondValue = 0;
+    long thirdValue = 0;
+    int mode = (int) (vertexId % 6);
+
+    vertexId *= 107;
+    superstep *= 107;
+
+    if (mode < 2) {
+      firstValue = configuredSeed;
+      if (mode == 0) {
+        secondValue = superstep;
+        thirdValue = vertexId;
+      } else {
+        secondValue = vertexId;
+        thirdValue = superstep;
+      }
+    } else if (mode < 4) {
+      firstValue = superstep;
+      if (mode == 2) {
+        secondValue = configuredSeed;
+        thirdValue = vertexId;
+      } else {
+        secondValue = vertexId;
+        thirdValue = configuredSeed;
+      }
+    } else if (mode < 6) {
+      firstValue = vertexId;
+      if (mode == 4) {
+        secondValue = configuredSeed;
+        thirdValue = superstep;
+      } else {
+        secondValue = superstep;
+        thirdValue = configuredSeed;
+      }
+    }
+
+    long seed = JaBeJaUtils.calculateLongHashCode(String.format("%d#%d#%d",
+      firstValue, secondValue, thirdValue));
+
+    return seed;
   }
 
   /**

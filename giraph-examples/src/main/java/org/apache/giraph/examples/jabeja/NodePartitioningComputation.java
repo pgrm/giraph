@@ -22,6 +22,7 @@ import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.util.AbstractMap;
@@ -42,10 +43,13 @@ public class NodePartitioningComputation extends
    */
   private static final int NUMBER_OF_STEPS_DURING_INITIALIZATION = 2;
 
+  /** logger */
+  private static final Logger LOG =
+    Logger.getLogger(NodePartitioningComputation.class);
   /**
-   * TODO fix this value
+   * How many stupersteps does it take to run through one JaBeJa round
    */
-  private static final int NUMBER_OF_STEPS_PER_JABEJA_ROUND = 3;
+  private static final int NUMBER_OF_STEPS_PER_JABEJA_ROUND = 5;
 
   /**
    * Since the JaBeJa algorithm is a Monte Carlo algorithm.
@@ -80,6 +84,13 @@ public class NodePartitioningComputation extends
     }
     this.vertex = vertex;
 
+    if (isTimeToStop()) {
+      this.vertex.voteToHalt();
+      return;
+    }
+
+    LOG.trace("Running compute in the " + getSuperstep() + " round");
+
     if (super.getSuperstep() < 2) {
       initializeGraph(messages);
     } else {
@@ -92,11 +103,8 @@ public class NodePartitioningComputation extends
         ((super.getSuperstep() - NUMBER_OF_STEPS_DURING_INITIALIZATION) %
          NUMBER_OF_STEPS_PER_JABEJA_ROUND);
 
+      LOG.trace("running JaBeJaAlgorithm");
       runJaBeJaAlgorithm(mode, messages);
-    }
-
-    if (isTimeToStop()) {
-      this.vertex.voteToHalt();
     }
   }
 
@@ -142,6 +150,8 @@ public class NodePartitioningComputation extends
 
       if (partner.getKey() != null) {
         this.vertex.getValue().setChosenPartnerIdForExchange(partner.getKey());
+        LOG.trace(this.vertex.getId().get() +
+                 ": Initialize Color-Exchange with " + partner.getKey());
         initiateColoExchangeHandshake(partner);
       } else {
         this.vertex.getValue().setChosenPartnerIdForExchange(-1);
@@ -163,7 +173,7 @@ public class NodePartitioningComputation extends
    * the maximum allowed number
    */
   private boolean isTimeToStop() {
-    return getSuperstep() >= this.conf.getMaxNumberOfSuperSteps();
+    return getSuperstep() > this.conf.getMaxNumberOfSuperSteps();
   }
 
   /**
@@ -172,6 +182,9 @@ public class NodePartitioningComputation extends
   private void initializeColor() {
     int numberOfColors = this.conf.getNumberOfColors();
     int myColor = (int) getRandomNumber(numberOfColors);
+
+    LOG.trace("Chose color " + myColor + " out of " + numberOfColors +
+             " colors");
 
     this.vertex.getValue().setNodeColor(myColor);
   }
@@ -303,39 +316,83 @@ public class NodePartitioningComputation extends
    */
   private void initiateColoExchangeHandshake(Map.Entry<Long, Double> partner) {
     super.sendMessage(new LongWritable(partner.getKey()),
-      new Message(partner.getKey(), partner.getValue()));
+      new Message(this.vertex.getId().get(), partner.getValue()));
   }
 
   /**
-   * TODO This is the part of the JaBeJa algorithm which implements the full
-   * color exchange
+   * This part is tricky - it performs the handshake and the actual color
+   * exchange, following possibilities exist:
+   * 1: no messages have been received - nobody wants to exchange colors - DONE
+   * 2: a message from the preferred partner has been received,
+   * since the partner got the message also from this node,
+   * both know they can exchange the color - DONE
+   * <p/>
+   * 3: received message(s) for color exchange from different nodes,
+   * pick the best performing one and register it as the new preferred
+   * partner and reply. In the next step there are 2 possibilities:
+   * <p/>
+   * 3.1: no further message was received, reply one more time to the new
+   * preferred partner to confirm it, during the next round either we receive
+   * a second confirmation, exchange colors, or not - drop color exchange
+   * <p/>
+   * 3.2: one further message was received, this comes from the previous
+   * preferred partner, no take a chance and choose one of the 2 and send a
+   * second confirmation. If during the next round a confirmation from this
+   * node is received, exchange the colors otherwise drop
    *
    * @param mode     the sub-step of the color exchange
    * @param messages The messages sent to this Vertex
    */
   private void continueColorExchange(int mode, Iterable<Message> messages) {
+    NodePartitioningVertexData vertexData = this.vertex.getValue();
+
     switch (mode) {
     case 0:
       Long partnerId = getBestOfferedPartnerIdForExchange(messages);
 
+      LOG.trace(this.vertex.getId().get() + ": best offer from " + partnerId);
       if (partnerId != null) {
-        long desiredPartnerId =
-          this.vertex.getValue().getChosenPartnerIdForExchange();
+        long desiredPartnerId = vertexData.getChosenPartnerIdForExchange();
 
         if (partnerId == desiredPartnerId) {
+          LOG.trace("Direct match - let's exchange");
           exchangeColors(partnerId);
-        } else if (this.conf.useComplexColorExchange()) {
-          throw new UnsupportedOperationException();
-          //confirmColorExchangeWithPartner(partnerId);
+          vertexData.setChosenPartnerIdForExchange(-1); // reset partner
+        } else {
+          LOG.trace("Send confirmation");
+          confirmColorExchangeWithPartner(partnerId);
         }
       }
       break;
-    default:
-    }
+    case 1:
+      long preferredPartner = vertexData.getChosenPartnerIdForExchange();
 
-    // restart the algorithm from the beginning again
-    if (mode == 3 || (mode == 0 && this.conf.useComplexColorExchange())) {
+      if (preferredPartner > -1) {
+        // has previously preferred partner answered?
+        if (messages.iterator().hasNext()) {
+          // switch the vertex id with a 50:50 chance
+          if (getRandomNumber(2) == 1) {
+            preferredPartner = messages.iterator().next().getVertexId();
+          }
+        }
+        LOG.trace(this.vertex.getId().get() +
+                 ": second confirmation to " + preferredPartner);
+        confirmColorExchangeWithPartner(preferredPartner);
+      }
+      break;
+    case 2:
+      Long finalPartnerId = getBestOfferedPartnerIdForExchange(messages);
+
+      LOG.trace(this.vertex.getId().get() +
+               ": got a final reply from " + finalPartnerId);
+      if (finalPartnerId != null &&
+          finalPartnerId == vertexData.getChosenPartnerIdForExchange()) {
+        LOG.trace("It fits - let's exchange");
+        exchangeColors(finalPartnerId);
+      }
       announceColorIfChanged();
+      break;
+    default:
     }
   }
 
@@ -366,6 +423,17 @@ public class NodePartitioningComputation extends
     }
 
     return partnerId;
+  }
+
+  /**
+   * Send a confirmation to the partner and set it as the new preferred partner
+   *
+   * @param partnerId the id of the vertex with whom the exchange is planned
+   */
+  private void confirmColorExchangeWithPartner(long partnerId) {
+    super.sendMessage(new LongWritable(partnerId),
+      new Message(this.vertex.getId().get()));
+    this.vertex.getValue().setChosenPartnerIdForExchange(partnerId);
   }
 
   /**

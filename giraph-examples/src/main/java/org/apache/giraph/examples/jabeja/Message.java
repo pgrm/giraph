@@ -110,7 +110,8 @@ public class Message extends BaseWritable {
    *
    * @param vertexId the id of the vertex sending the message
    */
-  private Message(long vertexId) {
+  public Message(long vertexId) {
+    this.messageType = Type.ConfirmColorExchange;
     this.vertexId = vertexId;
   }
 
@@ -224,7 +225,12 @@ public class Message extends BaseWritable {
     /**
      * Is initializing a color exchange
      */
-    ColorExchangeInitialization(4);
+    ColorExchangeInitialization(4),
+
+    /**
+     * To confirm an initialized color exchange
+     */
+    ConfirmColorExchange(8);
 
     /**
      * the int representation of the type, necessary for serialization
