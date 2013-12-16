@@ -51,6 +51,12 @@ public class Message extends BaseWritable {
   private int color;
 
   /**
+   * The value calculated by JaBeJa-sum function
+   * {@code NodePartitioningComputation.getJaBeJaSum()}
+   */
+  private double improvedNeighboringColorsValue = 0;
+
+  /**
    * Default constructor for reflection
    */
   public Message() {
@@ -66,7 +72,7 @@ public class Message extends BaseWritable {
     this(vertexId);
 
     this.color = color;
-    this.messageType = Type.ColorExchange;
+    this.messageType = Type.ColorUpdate;
   }
 
   /**
@@ -80,11 +86,27 @@ public class Message extends BaseWritable {
     this(vertexId);
 
     this.neighboringColorRatio = neighboringColorRatio;
-    this.messageType = Type.DegreeExchange;
+    this.messageType = Type.DegreeUpdate;
   }
 
   /**
-   * Initialize the message with the source vertex id
+   * Initialize message for color exchange initialization
+   *
+   * @param vertexId                       the id of the vertex sending the
+   *                                       message
+   * @param improvedNeighboringColorsValue the new value calculated by
+   *                                       JaBeJa-sum
+   */
+  public Message(long vertexId, double improvedNeighboringColorsValue) {
+    this(vertexId);
+
+    this.improvedNeighboringColorsValue = improvedNeighboringColorsValue;
+    this.messageType = Type.ColorExchangeInitialization;
+  }
+
+  /**
+   * Initialize the message with the source vertex id for color exchange
+   * initialization
    *
    * @param vertexId the id of the vertex sending the message
    */
@@ -104,6 +126,10 @@ public class Message extends BaseWritable {
     return color;
   }
 
+  public double getImprovedNeighboringColorsValue() {
+    return improvedNeighboringColorsValue;
+  }
+
   public Map<Integer, Integer> getNeighboringColorRatio() {
     return neighboringColorRatio;
   }
@@ -114,10 +140,17 @@ public class Message extends BaseWritable {
     int typeValue = dataInput.readInt();
 
     this.messageType = Type.convertToType(typeValue);
-    if (this.messageType == Type.ColorExchange) {
+    switch (this.messageType) {
+    case ColorUpdate:
       this.color = dataInput.readInt();
-    } else if (this.messageType == Type.DegreeExchange) {
+      break;
+    case DegreeUpdate:
       readNeighboringColorRatio(dataInput);
+      break;
+    case ColorExchangeInitialization:
+      this.improvedNeighboringColorsValue = dataInput.readDouble();
+      break;
+    default:
     }
   }
 
@@ -126,10 +159,17 @@ public class Message extends BaseWritable {
     dataOutput.writeLong(this.vertexId);
     dataOutput.writeInt(this.messageType.getValue());
 
-    if (this.messageType == Type.ColorExchange) {
+    switch (this.messageType) {
+    case ColorUpdate:
       dataOutput.writeInt(this.color);
-    } else if (this.messageType == Type.DegreeExchange) {
+      break;
+    case DegreeUpdate:
       writeNeighboringColorRatio(dataOutput);
+      break;
+    case ColorExchangeInitialization:
+      dataOutput.writeDouble(this.improvedNeighboringColorsValue);
+      break;
+    default:
     }
   }
 
@@ -167,10 +207,24 @@ public class Message extends BaseWritable {
    */
   public enum Type {
     /**
-     * The supported types Undefined, for exchanging colors and for
-     * exchanging neighboring colored degrees
+     * Initial value
      */
-    Undefined(-1), ColorExchange(1), DegreeExchange(2);
+    Undefined(-1),
+
+    /**
+     * Contains update about the nodes color
+     */
+    ColorUpdate(1),
+
+    /**
+     * Contains update about the nodes different colored degrees
+     */
+    DegreeUpdate(2),
+
+    /**
+     * Is initializing a color exchange
+     */
+    ColorExchangeInitialization(4);
 
     /**
      * the int representation of the type, necessary for serialization

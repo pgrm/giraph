@@ -75,6 +75,10 @@ public class VertexData extends BaseWritable {
     return this.neighborInformation.keySet();
   }
 
+  public Map<Long, NeighborInformation> getNeighborInformation() {
+    return neighborInformation;
+  }
+
   /**
    * Update the neighborInformation map with a new or updated entry of a
    * neighbor and its color and set the flag
@@ -273,6 +277,23 @@ public class VertexData extends BaseWritable {
       Map<Integer, Integer> neighboringColorRatio) {
 
       this.neighboringColorRatio = neighboringColorRatio;
+    }
+
+    /**
+     * Gets the number of neighbors in a specific color
+     *
+     * @param color color of the neighbors
+     * @return the number of neighbors in the color <code>color</code>
+     */
+    public int getNumberOfNeighbors(int color) {
+      Integer numberOfNeighborsInColor =
+        getNeighboringColorRatio().get(color);
+
+      if (numberOfNeighborsInColor == null) {
+        return 0;
+      } else {
+        return numberOfNeighborsInColor.intValue();
+      }
     }
   }
 }

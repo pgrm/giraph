@@ -37,6 +37,11 @@ public class NodePartitioningVertexData extends VertexData {
   private boolean hasColorChanged;
 
   /**
+   * Id of the vertex which has been chosen to exchange the color with
+   */
+  private long chosenPartnerIdForExchange;
+
+  /**
    * Default constructor for reflection
    */
   public NodePartitioningVertexData() {
@@ -45,6 +50,14 @@ public class NodePartitioningVertexData extends VertexData {
 
   public int getNodeColor() {
     return nodeColor;
+  }
+
+  public long getChosenPartnerIdForExchange() {
+    return chosenPartnerIdForExchange;
+  }
+
+  public void setChosenPartnerIdForExchange(long chosenPartnerIdForExchange) {
+    this.chosenPartnerIdForExchange = chosenPartnerIdForExchange;
   }
 
   /**
@@ -88,6 +101,7 @@ public class NodePartitioningVertexData extends VertexData {
     super.readFields(input);
 
     this.nodeColor = input.readInt();
+    this.chosenPartnerIdForExchange = input.readLong();
   }
 
   @Override
@@ -95,6 +109,7 @@ public class NodePartitioningVertexData extends VertexData {
     super.write(output);
 
     output.writeInt(this.nodeColor);
+    output.writeLong(this.chosenPartnerIdForExchange);
   }
 
   @Override

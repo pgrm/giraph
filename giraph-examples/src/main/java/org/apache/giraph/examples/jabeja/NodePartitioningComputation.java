@@ -23,6 +23,8 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 
 import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -30,29 +32,35 @@ import java.util.Random;
  * (https://www.sics.se/~amir/files/download/papers/jabeja.pdf)
  */
 public class NodePartitioningComputation extends
-        BasicComputation<LongWritable, NodePartitioningVertexData,
-                IntWritable, Message> {
+  BasicComputation<LongWritable, NodePartitioningVertexData,
+    IntWritable, Message> {
   /**
-   * The default number of different colors, if no
-   * JaBeJa.NumberOfColors is provided.
+   * How many additional steps are performed during initialization.
+   * There is only one additional step during the initialization,
+   * since it is necessary to collect neighbors who direct their edges to you.
    */
-  private static final int DEFAULT_NUMBER_OF_COLORS = 2;
+  private static final int NUMBER_OF_STEPS_DURING_INITIALIZATION = 2;
 
   /**
-   * The default number for many supersteps this algorithm should run,
-   * if no JaBeJa.MaxNumberOfSupersteps is provided
+   * TODO fix this value
    */
-  private static final int DEFAULT_MAX_NUMBER_OF_SUPERSTEPS = 100;
+  private static final int NUMBER_OF_STEPS_PER_JABEJA_ROUND = 5;
 
-  /**
-   * The actually defined maximum number of supersteps for how many this
-   * algorithm should run
-   */
-  private static Integer MAX_NUMBER_OF_SUPERSTEPS = null;
   /**
    * Since the JaBeJa algorithm is a Monte Carlo algorithm.
    */
   private Random randomGenerator = new Random();
+
+  /**
+   * The current temperature at the current superstep and JaBeJa round
+   */
+  private Double temperature = null;
+
+  /**
+   * An instance of the helper class to handle configurations.
+   */
+  private JaBeJaConfigurations conf = null;
+
   /**
    * The currently processed vertex
    */
@@ -60,18 +68,25 @@ public class NodePartitioningComputation extends
 
   @Override
   public void compute(
-          Vertex<LongWritable, NodePartitioningVertexData,
-                  IntWritable> vertex,
-          Iterable<Message> messages) throws IOException {
+    Vertex<LongWritable, NodePartitioningVertexData, IntWritable> vertex,
+    Iterable<Message> messages) throws IOException {
+
+    if (this.conf == null) {
+      this.conf = new JaBeJaConfigurations(super.getConf());
+    }
     this.vertex = vertex;
 
     if (super.getSuperstep() < 2) {
       initializeGraph(messages);
     } else {
-      // the 2nd step (mode == 1) is the same as the first step after the
+      // the 1st step (mode == 0) is the same as the first step after the
       // initialization (Superstep == 2) since at this time we get the final
       // colors and can announce the degree in case it has changed.
-      int mode = (int) ((super.getSuperstep() - 1) % 5);
+      // also note that announcing colors again, is the last step for JaBeJa
+      // and kind of a restart step
+      int mode = (int)
+        ((super.getSuperstep() - NUMBER_OF_STEPS_DURING_INITIALIZATION) %
+         NUMBER_OF_STEPS_PER_JABEJA_ROUND);
 
       runJaBeJaAlgorithm(mode, messages);
     }
@@ -109,24 +124,23 @@ public class NodePartitioningComputation extends
    */
   private void runJaBeJaAlgorithm(int mode, Iterable<Message> messages) {
     switch (mode) {
-    case 0: // new round started, announce your new color
-      announceColorIfChanged();
-      break;
-    case 1:
+    case 0:
       // update colors of your neighboring nodes,
       // and announce your new degree for each color
       storeColorsOfNodes(messages);
       announceColoredDegreesIfChanged();
       break;
-    case 2:
+    case 1:
       // updated colored degrees of all nodes and find a partner to
       // initiate the exchange with
       storeColoredDegreesOfNodes(messages);
-      Long partnerId = findPartner();
+      Map.Entry<Long, Double> partner = findPartner();
 
-      if (partnerId != null) {
-        initiateColoExchangeHandshake(partnerId);
+      if (partner.getKey() != null) {
+        this.vertex.getValue().setChosenPartnerIdForExchange(partner.getKey());
+        initiateColoExchangeHandshake(partner);
       } else {
+        this.vertex.getValue().setChosenPartnerIdForExchange(-1);
         // if no partner could be found, this node probably has already the
         // best possible color
         this.vertex.voteToHalt();
@@ -145,14 +159,14 @@ public class NodePartitioningComputation extends
    * the maximum allowed number
    */
   private boolean isTimeToStop() {
-    return getSuperstep() > getMaxNumberOfSuperSteps();
+    return getSuperstep() > this.conf.getMaxNumberOfSuperSteps();
   }
 
   /**
    * Set the color of the own node.
    */
   private void initializeColor() {
-    int numberOfColors = getNumberOfColors();
+    int numberOfColors = this.conf.getNumberOfColors();
     int myColor = (int) getRandomNumber(numberOfColors);
 
     this.vertex.getValue().setNodeColor(myColor);
@@ -187,7 +201,7 @@ public class NodePartitioningComputation extends
   private void storeColorsOfNodes(Iterable<Message> messages) {
     for (Message msg : messages) {
       this.vertex.getValue().setNeighborWithColor(msg.getVertexId(),
-              msg.getColor());
+        msg.getColor());
     }
   }
 
@@ -219,8 +233,8 @@ public class NodePartitioningComputation extends
   private void announceColoredDegrees() {
     for (Long neighborId : this.vertex.getValue().getNeighbors()) {
       super.sendMessage(new LongWritable(neighborId),
-              new Message(this.vertex.getId().get(),
-                      this.vertex.getValue().getNeighboringColorRatio()));
+        new Message(this.vertex.getId().get(),
+          this.vertex.getValue().getNeighboringColorRatio()));
     }
   }
 
@@ -233,26 +247,57 @@ public class NodePartitioningComputation extends
   private void storeColoredDegreesOfNodes(Iterable<Message> messages) {
     for (Message message : messages) {
       this.vertex.getValue().setNeighborWithColorRatio(
-              message.getVertexId(), message.getNeighboringColorRatio());
+        message.getVertexId(), message.getNeighboringColorRatio());
     }
   }
 
   /**
-   * TODO Find a partner to exchange the colors with
+   * Finds the best partner to exchange their colors with each other.
    *
    * @return the vertex ID of the partner with whom the colors will be
    * exchanged
    */
-  private Long findPartner() {
-    return 0L;
+  private Map.Entry<Long, Double> findPartner() {
+    double highest = 0;
+    Long bestPartner = null;
+    NodePartitioningVertexData data = this.vertex.getValue();
+
+    for (Map.Entry<Long, VertexData.NeighborInformation> neighbor :
+      data.getNeighborInformation().entrySet()) {
+
+      int myDegree = data.getNumberOfNeighborsWithCurrentColor();
+      int neighborsDegree =
+        neighbor.getValue().getNumberOfNeighbors(
+          neighbor.getValue().getColor());
+
+      int myNewDegree =
+        data.getNumberOfNeighbors(neighbor.getValue().getColor());
+      int neighborsNewDegree =
+        neighbor.getValue().getNumberOfNeighbors(data.getNodeColor());
+
+      double sum = getJaBeJaSum(myDegree, neighborsDegree);
+      double newSum = getJaBeJaSum(myNewDegree, neighborsNewDegree);
+
+      if (isNewColorBetterThanOld(newSum, sum) && newSum > highest) {
+        bestPartner = neighbor.getKey();
+        highest = newSum;
+      }
+    }
+
+    return new AbstractMap.SimpleEntry<Long, Double>(bestPartner, highest);
   }
 
   /**
-   * TODO initialized the color-exchange handshake
+   * initialize the color-exchange handshake by sending a simple message to
+   * the partner
    *
-   * @param partnerId the id of the vertex with whom I want to exchange colors
+   * @param partner the vertex with whom I want to exchange colors
+   *                (key = vertex id,
+   *                value = JaBeJa-sum for the finished exchange)
    */
-  private void initiateColoExchangeHandshake(long partnerId) {
+  private void initiateColoExchangeHandshake(Map.Entry<Long, Double> partner) {
+    super.sendMessage(new LongWritable(partner.getKey()),
+      new Message(partner.getKey(), partner.getValue()));
   }
 
   /**
@@ -263,22 +308,133 @@ public class NodePartitioningComputation extends
    * @param messages The messages sent to this Vertex
    */
   private void continueColorExchange(int mode, Iterable<Message> messages) {
+    switch (mode) {
+    case 0:
+      Long partnerId = getBestOfferedPartnerIdForExchange(messages);
+
+      if (partnerId != null) {
+        long desiredPartnerId =
+          this.vertex.getValue().getChosenPartnerIdForExchange();
+
+        if (partnerId == desiredPartnerId) {
+          exchangeColors(partnerId);
+        } else if (this.conf.useComplexColorExchange()) {
+          throw new UnsupportedOperationException();
+          //confirmColorExchangeWithPartner(partnerId);
+        }
+      }
+      break;
+    default:
+    }
+
+    // restart the algorithm from the beginning again
+    if (mode == 3 || (mode == 0 && this.conf.useComplexColorExchange())) {
+      announceColorIfChanged();
+    }
   }
 
   /**
-   * Checks if the Maximum Number of Supersteps has been configured,
-   * otherwise uses the default value.
+   * Selects the partner id from incoming offers (messages) so that it is
+   * either the desired one (best choice) or otherwise the one with the
+   * highest value. If the desired partner is found, it means the other node
+   * found it as well, and there is no need for additional confirmations
+   * anymore.
    *
-   * @return the maximum number of supersteps for which the algorithm should
-   * run
+   * @param messages incoming exchange offers
+   * @return the best offer from the incoming messages
    */
-  private long getMaxNumberOfSuperSteps() {
-    if (MAX_NUMBER_OF_SUPERSTEPS == null) {
-      MAX_NUMBER_OF_SUPERSTEPS =
-              super.getConf().getInt("JaBeJa.MaxNumberOfSupersteps",
-                      DEFAULT_MAX_NUMBER_OF_SUPERSTEPS);
+  private Long getBestOfferedPartnerIdForExchange(Iterable<Message> messages) {
+    long desiredPartnerId =
+      this.vertex.getValue().getChosenPartnerIdForExchange();
+    Long partnerId = null;
+    double bestValue = 0;
+
+    for (Message message : messages) {
+      if (message.getVertexId() == desiredPartnerId) {
+        partnerId = message.getVertexId();
+        break;
+      } else if (message.getImprovedNeighboringColorsValue() > bestValue) {
+        partnerId = message.getVertexId();
+        bestValue = message.getImprovedNeighboringColorsValue();
+      }
     }
-    return MAX_NUMBER_OF_SUPERSTEPS;
+
+    return partnerId;
+  }
+
+  /**
+   * Once an agreement was met, it is safe to assume that both node know
+   * about this agreement, both nodes also know about each others color
+   * wherefore we don't need to send anything but simply only set the color
+   * of the current node to that of the partner
+   *
+   * @param partnerId the id of the color exchanging partner
+   */
+  private void exchangeColors(long partnerId) {
+    int newColor =
+      this.vertex.getValue().getNeighborInformation().
+        get(partnerId).getColor();
+
+    this.vertex.getValue().setNodeColor(newColor);
+  }
+
+  /**
+   * JaBeJa uses for summing up node degrees the exponent {@code alpha}
+   *
+   * @param node1Degree degree of the first node
+   * @param node2Degree degree of the second node
+   * @return node1Degree^alpha + node2Degree^alpha
+   */
+  private double getJaBeJaSum(int node1Degree, int node2Degree) {
+    return Math.pow(node1Degree, this.conf.getAlpha()) +
+           Math.pow(node2Degree, this.conf.getAlpha());
+  }
+
+  /**
+   * uses simulated annealing to check if the new option is better than the
+   * old one
+   *
+   * @param newJaBeJaSum sum of the new degrees calculated with
+   *                     {@code getJaBeJaSum}
+   * @param oldJaBeJaSum sum of the old degrees calculated with
+   *                     {@code getJaBeJaSum}
+   * @return decision if the new solution is better than the old one
+   */
+  private boolean isNewColorBetterThanOld(
+    double newJaBeJaSum,
+    double oldJaBeJaSum) {
+
+    return (newJaBeJaSum * getTemperature()) > oldJaBeJaSum;
+  }
+
+  /**
+   * Calculates the current temperature based on the initial temperature the
+   * rounds passed and the cooling factor
+   *
+   * @return the current temperature
+   */
+  private double getTemperature() {
+    if (temperature == null) {
+      long rounds = getNumberOfJaBeJaRounds();
+      double initialTemperature = this.conf.getInitialTemperature();
+      double temperaturePreserving = 1 - this.conf.getCoolingFactor();
+
+      temperature =
+        Math.pow(temperaturePreserving, rounds) * initialTemperature;
+    }
+    return temperature;
+  }
+
+  /**
+   * Calculates based on the supersteps how often the JaBeJa-algorithm ran
+   * through with all it's substeps
+   *
+   * @return how often the JaBeJa-algorithm with all it's substeps ran through
+   */
+  private long getNumberOfJaBeJaRounds() {
+    long jaBeJaSupersteps = super.getSuperstep() -
+                            NUMBER_OF_STEPS_DURING_INITIALIZATION;
+    return jaBeJaSupersteps / NUMBER_OF_STEPS_PER_JABEJA_ROUND;
   }
 
   /**
@@ -289,17 +445,7 @@ public class NodePartitioningComputation extends
    */
   private void sendCurrentVertexColor(LongWritable targetId) {
     super.sendMessage(targetId, new Message(this.vertex.getId().get(),
-            this.vertex.getValue()
-                    .getNodeColor()));
-  }
-
-  /**
-   * @return the configured or default number of different colors in
-   * the current graph.
-   */
-  private int getNumberOfColors() {
-    return super.getConf().getInt("JaBeJa.NumberOfColors",
-            DEFAULT_NUMBER_OF_COLORS);
+      this.vertex.getValue().getNodeColor()));
   }
 
   /**
@@ -312,44 +458,9 @@ public class NodePartitioningComputation extends
    */
   private long getRandomNumber(long exclusiveMaxValue) {
     if (this.randomGenerator == null) {
-      initializeRandomGenerator();
+      this.randomGenerator = JaBeJaUtils.initializeRandomGenerator(
+        this.conf, super.getSuperstep(), this.vertex.getId().get());
     }
     return (long) (this.randomGenerator.nextDouble() * exclusiveMaxValue);
-  }
-
-  /**
-   * Initializes the random generator, either with the default constructor or
-   * with a seed which will guarantee, that the same vertex in the same round
-   * will always generate the same random values.
-   */
-  private void initializeRandomGenerator() {
-    int configuredSeed = super.getConf().getInt("JaBeJa.RandomSeed", 0);
-
-    // if you want to have a totally random number just set the config to -1
-    if (configuredSeed == -1) {
-      this.randomGenerator = new Random();
-    } else {
-      long seed = calculateHashCode(String.format("%d#%d#%d", configuredSeed,
-              super.getSuperstep(),
-              this.vertex.getId().get()));
-      this.randomGenerator = new Random(seed);
-    }
-  }
-
-  /**
-   * Based on the hashCode function defined in {@link java.lang.String},
-   * with the difference that it returns a long instead of only an integer.
-   *
-   * @param value the String for which the hash-code should be calculated
-   * @return a 64bit hash-code
-   */
-  private static long calculateHashCode(String value) {
-    int hashCode = 0;
-
-    for (int i = 0; i < value.length(); i++) {
-      hashCode = 31 * hashCode + value.charAt(i);
-    }
-
-    return hashCode;
   }
 }
