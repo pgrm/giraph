@@ -22,7 +22,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import net.iharder.Base64;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.giraph.bsp.*;
+import org.apache.giraph.bsp.ApplicationState;
+import org.apache.giraph.bsp.BspInputFormat;
+import org.apache.giraph.bsp.BspService;
+import org.apache.giraph.bsp.CentralizedServiceMaster;
+import org.apache.giraph.bsp.SuperstepState;
 import org.apache.giraph.comm.MasterClient;
 import org.apache.giraph.comm.MasterServer;
 import org.apache.giraph.comm.netty.NettyMasterClient;
@@ -30,11 +34,23 @@ import org.apache.giraph.comm.netty.NettyMasterServer;
 import org.apache.giraph.conf.GiraphConstants;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.counters.GiraphStats;
-import org.apache.giraph.graph.*;
+import org.apache.giraph.graph.AddressesAndPartitionsWritable;
+import org.apache.giraph.graph.GlobalStats;
+import org.apache.giraph.graph.GraphFunctions;
+import org.apache.giraph.graph.GraphState;
+import org.apache.giraph.graph.GraphTaskManager;
+import org.apache.giraph.graph.InputSplitEvents;
+import org.apache.giraph.graph.InputSplitPaths;
 import org.apache.giraph.io.EdgeInputFormat;
 import org.apache.giraph.io.GiraphInputFormat;
 import org.apache.giraph.io.VertexInputFormat;
-import org.apache.giraph.metrics.*;
+import org.apache.giraph.metrics.AggregatedMetrics;
+import org.apache.giraph.metrics.GiraphMetrics;
+import org.apache.giraph.metrics.GiraphTimer;
+import org.apache.giraph.metrics.GiraphTimerContext;
+import org.apache.giraph.metrics.ResetSuperstepMetricsObserver;
+import org.apache.giraph.metrics.SuperstepMetricsRegistry;
+import org.apache.giraph.metrics.WorkerSuperstepMetrics;
 import org.apache.giraph.partition.MasterGraphPartitioner;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
@@ -48,8 +64,11 @@ import org.apache.giraph.utils.WritableUtils;
 import org.apache.giraph.worker.WorkerInfo;
 import org.apache.giraph.zk.BspEvent;
 import org.apache.giraph.zk.PredicateLock;
-import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
@@ -66,15 +85,32 @@ import org.apache.zookeeper.ZooDefs.Ids;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.giraph.conf.GiraphConstants.*;
+import static org.apache.giraph.conf.GiraphConstants.INPUT_SPLIT_SAMPLE_PERCENT;
+import static org.apache.giraph.conf.GiraphConstants.KEEP_ZOOKEEPER_DATA;
+import static org.apache.giraph.conf.GiraphConstants
+  .PARTITION_LONG_TAIL_MIN_PRINT;
+import static org.apache.giraph.conf.GiraphConstants.USE_INPUT_SPLIT_LOCALITY;
 
 /**
  * ZooKeeper-based implementation of {@link CentralizedServiceMaster}.
@@ -1390,8 +1426,8 @@ public class BspServiceMaster<I extends WritableComparable,
    * @param removeableSuperstep Supersteo to clean up
    * @throws InterruptedException
    */
-  private void cleanUpOldSuperstep(long removeableSuperstep) throws
-                                                             InterruptedException {
+  private void cleanUpOldSuperstep(long removeableSuperstep)
+    throws InterruptedException {
     if (KEEP_ZOOKEEPER_DATA.isFalse(getConfiguration()) &&
         (removeableSuperstep >= 0)) {
       String oldSuperstepPath =

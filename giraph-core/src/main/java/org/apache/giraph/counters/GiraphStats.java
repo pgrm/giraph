@@ -47,7 +47,7 @@ public class GiraphStats extends HadoopCountersBase {
     = "Aggregate sent messages";
   /** aggregate sent messages bytes counter name */
   public static final String AGGREGATE_SENT_MESSAGE_BYTES_NAME
-    = "Aggregate sent message message bytes";
+    = "Aggregate sent message bytes";
   /** workers counter name */
   public static final String CURRENT_WORKERS_NAME = "Current workers";
   /** current master partition task counter name */
