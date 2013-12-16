@@ -71,6 +71,9 @@ public class NodePartitioningComputation extends
   public void compute(
     Vertex<LongWritable, NodePartitioningVertexData, IntWritable> vertex,
     Iterable<Message> messages) throws IOException {
+    // reset the random generator in the beginning so that it will be
+    // recreated for every step and vertex
+    this.randomGenerator = null;
 
     if (this.conf == null) {
       this.conf = new JaBeJaConfigurations(super.getConf());
@@ -160,7 +163,7 @@ public class NodePartitioningComputation extends
    * the maximum allowed number
    */
   private boolean isTimeToStop() {
-    return getSuperstep() > this.conf.getMaxNumberOfSuperSteps();
+    return getSuperstep() >= this.conf.getMaxNumberOfSuperSteps();
   }
 
   /**
