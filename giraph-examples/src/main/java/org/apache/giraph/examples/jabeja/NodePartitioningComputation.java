@@ -17,6 +17,7 @@
  */
 package org.apache.giraph.examples.jabeja;
 
+import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.IntWritable;
@@ -44,7 +45,7 @@ public class NodePartitioningComputation extends
   /**
    * TODO fix this value
    */
-  private static final int NUMBER_OF_STEPS_PER_JABEJA_ROUND = 5;
+  private static final int NUMBER_OF_STEPS_PER_JABEJA_ROUND = 3;
 
   /**
    * Since the JaBeJa algorithm is a Monte Carlo algorithm.
@@ -104,9 +105,9 @@ public class NodePartitioningComputation extends
    * @param messages The messages sent to this Vertex
    */
   private void initializeGraph(Iterable<Message> messages) {
-    if (getSuperstep() == 0) {
+    if (super.getSuperstep() == 0) {
       initializeColor();
-      announceColor();
+      announceInitialColor();
     } else {
       storeColorsOfNodes(messages);
       announceColorToNewNeighbors(messages);
@@ -147,7 +148,7 @@ public class NodePartitioningComputation extends
       }
       break;
     default:
-      mode = mode - 3;
+      mode = mode - 2;
       continueColorExchange(mode, messages);
     }
   }
@@ -178,17 +179,19 @@ public class NodePartitioningComputation extends
    */
   private void announceColorIfChanged() {
     if (this.vertex.getValue().getHasColorChanged()) {
-      announceColor();
+      for (Long neighborId : this.vertex.getValue().getNeighbors()) {
+        sendCurrentVertexColor(new LongWritable(neighborId));
+      }
       this.vertex.getValue().resetHasColorChanged();
     }
   }
 
   /**
-   * Announce the current color to all connected vertices.
+   * Announce the current color to all connected vertices for the first time.
    */
-  private void announceColor() {
-    for (Long neighborId : this.vertex.getValue().getNeighbors()) {
-      sendCurrentVertexColor(new LongWritable(neighborId));
+  private void announceInitialColor() {
+    for (Edge<LongWritable, IntWritable> edge : this.vertex.getEdges()) {
+      sendCurrentVertexColor(edge.getTargetVertexId());
     }
   }
 
