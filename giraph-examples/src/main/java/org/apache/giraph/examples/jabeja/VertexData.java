@@ -45,6 +45,10 @@ public class VertexData extends BaseWritable {
    */
   private final Map<Long, NeighborInformation> randomNeighborInformation =
     new HashMap<Long, NeighborInformation>();
+  /**
+   * Id of the vertex which has been chosen to exchange the color with
+   */
+  private long chosenPartnerIdForExchange;
 
   /**
    * The key is the color, the value is how often the color exists.
@@ -227,16 +231,26 @@ public class VertexData extends BaseWritable {
     }
   }
 
+  public long getChosenPartnerIdForExchange() {
+    return chosenPartnerIdForExchange;
+  }
+
+  public void setChosenPartnerIdForExchange(long chosenPartnerIdForExchange) {
+    this.chosenPartnerIdForExchange = chosenPartnerIdForExchange;
+  }
+
   @Override
   public void readFields(DataInput input) throws IOException {
     readNeighboringColors(input, this.neighborInformation);
     readNeighboringColors(input, this.randomNeighborInformation);
+    this.chosenPartnerIdForExchange = input.readLong();
   }
 
   @Override
   public void write(DataOutput output) throws IOException {
     writeNeighboringColors(output, this.neighborInformation);
     writeNeighboringColors(output, this.randomNeighborInformation);
+    output.writeLong(this.chosenPartnerIdForExchange);
   }
 
   /**

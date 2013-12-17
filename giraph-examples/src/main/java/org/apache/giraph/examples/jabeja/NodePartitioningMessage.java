@@ -26,7 +26,7 @@ import java.util.Map;
 /**
  * Structure of messages sent between vertices
  */
-public class Message extends BaseWritable {
+public class NodePartitioningMessage extends BaseMessage {
   /**
    * The neighboring color ratio represents how many neighbors (value) have a
    * specific color (key)
@@ -35,26 +35,9 @@ public class Message extends BaseWritable {
     new HashMap<Integer, Integer>();
 
   /**
-   * The type of this current message
-   */
-  private Type messageType = Type.Undefined;
-
-  /**
-   * Id of the source vertex sending the message. Necessary for replies or
-   * knowing your neighbors.
-   */
-  private long vertexId;
-
-  /**
    * The color of the vertex sending the message.
    */
   private int color;
-
-  /**
-   * Flag to set for the initialization to see if the message comes from a
-   * normal or random neighbor
-   */
-  private boolean isRandomNeighbor;
 
   /**
    * The value calculated by JaBeJa-sum function
@@ -65,89 +48,73 @@ public class Message extends BaseWritable {
   /**
    * Default constructor for reflection
    */
-  public Message() {
+  public NodePartitioningMessage() {
   }
 
   /**
    * Initializes the message for sending the current vertex color
    *
-   * @param vertexId         the id of the vertex sending the message
+   * @param sourceId         the id of the vertex sending the message
    * @param color            the color of the vertex sending the message
    * @param isRandomNeighbor flag if it is a regular neighbor or one from the
    *                         random overlay
    */
-  public Message(long vertexId, int color, boolean isRandomNeighbor) {
-    this(vertexId, isRandomNeighbor);
+  public NodePartitioningMessage(
+    long sourceId, int color, boolean isRandomNeighbor) {
+    super(sourceId, isRandomNeighbor, Type.ColorUpdate);
 
     this.color = color;
-    this.messageType = Type.ColorUpdate;
   }
 
   /**
    * Initialize the message for sending neighboring color ratios
    *
-   * @param vertexId              the id of the vertex sending the message
+   * @param sourceId              the id of the vertex sending the message
    * @param neighboringColorRatio the neighboring color ratio of the vertex
    *                              sending this message
    * @param isRandomNeighbor      flag if it is a regular neighbor or one
    *                              from the random overlay
    */
-  public Message(
-    long vertexId, Map<Integer, Integer> neighboringColorRatio,
+  public NodePartitioningMessage(
+    long sourceId, Map<Integer, Integer> neighboringColorRatio,
     boolean isRandomNeighbor) {
-    this(vertexId, isRandomNeighbor);
+    super(sourceId, isRandomNeighbor, Type.DegreeUpdate);
 
     this.neighboringColorRatio = neighboringColorRatio;
-    this.messageType = Type.DegreeUpdate;
   }
 
   /**
    * Initialize message for color exchange initialization
    *
-   * @param vertexId                       the id of the vertex sending the
+   * @param sourceId                       the id of the vertex sending the
    *                                       message
    * @param improvedNeighboringColorsValue the new value calculated by
    *                                       JaBeJa-sum
    * @param isRandomNeighbor               flag if it is a regular neighbor
    *                                       or one from the random overlay
    */
-  public Message(
-    long vertexId, double improvedNeighboringColorsValue,
+  public NodePartitioningMessage(
+    long sourceId, double improvedNeighboringColorsValue,
     boolean isRandomNeighbor) {
-    this(vertexId, isRandomNeighbor);
+    super(sourceId, isRandomNeighbor, Type.ColorExchangeInitialization);
 
     this.improvedNeighboringColorsValue = improvedNeighboringColorsValue;
-    this.messageType = Type.ColorExchangeInitialization;
   }
 
   /**
    * Initialize the message with the source vertex id for color exchange
    * initialization
    *
-   * @param vertexId         the id of the vertex sending the message
+   * @param sourceId         the id of the vertex sending the message
    * @param isRandomNeighbor flag if it is a regular neighbor or one from the
    *                         random overlay
    */
-  public Message(long vertexId, boolean isRandomNeighbor) {
-    this.messageType = Type.ConfirmColorExchange;
-    this.vertexId = vertexId;
-    this.isRandomNeighbor = isRandomNeighbor;
-  }
-
-  public long getVertexId() {
-    return vertexId;
-  }
-
-  public Type getMessageType() {
-    return messageType;
+  public NodePartitioningMessage(long sourceId, boolean isRandomNeighbor) {
+    super(sourceId, isRandomNeighbor, Type.ConfirmColorExchange);
   }
 
   public int getColor() {
     return color;
-  }
-
-  public boolean isRandomNeighbor() {
-    return isRandomNeighbor;
   }
 
   public double getImprovedNeighboringColorsValue() {
@@ -160,12 +127,9 @@ public class Message extends BaseWritable {
 
   @Override
   public void readFields(DataInput dataInput) throws IOException {
-    this.vertexId = dataInput.readLong();
-    int typeValue = dataInput.readInt();
-    this.isRandomNeighbor = dataInput.readBoolean();
+    super.readFields(dataInput);
 
-    this.messageType = Type.convertToType(typeValue);
-    switch (this.messageType) {
+    switch (super.getMessageType()) {
     case ColorUpdate:
       this.color = dataInput.readInt();
       break;
@@ -181,11 +145,9 @@ public class Message extends BaseWritable {
 
   @Override
   public void write(DataOutput dataOutput) throws IOException {
-    dataOutput.writeLong(this.vertexId);
-    dataOutput.writeInt(this.messageType.getValue());
-    dataOutput.writeBoolean(this.isRandomNeighbor);
+    super.write(dataOutput);
 
-    switch (this.messageType) {
+    switch (super.getMessageType()) {
     case ColorUpdate:
       dataOutput.writeInt(this.color);
       break;
@@ -228,69 +190,4 @@ public class Message extends BaseWritable {
         super.INTEGER_VALUE_WRITER);
   }
 
-  /**
-   * The possible types of this message
-   */
-  public enum Type {
-    /**
-     * Initial value
-     */
-    Undefined(-1),
-
-    /**
-     * Contains update about the nodes color
-     */
-    ColorUpdate(1),
-
-    /**
-     * Contains update about the nodes different colored degrees
-     */
-    DegreeUpdate(2),
-
-    /**
-     * Is initializing a color exchange
-     */
-    ColorExchangeInitialization(4),
-
-    /**
-     * To confirm an initialized color exchange
-     */
-    ConfirmColorExchange(8);
-
-    /**
-     * the int representation of the type, necessary for serialization
-     */
-    private final int value;
-
-    /**
-     * Private constructor of the type with the representing int value
-     *
-     * @param value the representing integer value of the enum type
-     */
-    private Type(int value) {
-      this.value = value;
-    }
-
-    public int getValue() {
-      return this.value;
-    }
-
-    /**
-     * Converts the provided integer into the specific type,
-     * necessary for parsing this enum
-     *
-     * @param value the representing integer value of the enum type
-     * @return the actual enum type
-     */
-    public static Type convertToType(int value) {
-      for (Type t : Type.values()) {
-        if (t.getValue() == value) {
-          return t;
-        }
-      }
-
-      throw new IllegalArgumentException("The provided value doesn't have a " +
-                                         "valid Type integer");
-    }
-  }
 }

@@ -22,13 +22,21 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Vertex data for the NodePartitioning solution.
+ *
  */
-public class NodePartitioningVertexData extends VertexData {
+public class EdgePartitioningEdgeData extends BaseWritable {
+  /**
+   * A unique ID of the edge consisting of the vertex id and an index can be
+   * calculated as follows:
+   * index * numberOfVertices + vertexId
+   * (vertexId should be between 0 and numberOfVertices)
+   */
+  private long edgeId;
+
   /**
    * The color of the current node
    */
-  private int nodeColor;
+  private int edgeColor;
 
   /**
    * Flag, which indicates if the color has changed since it has been reset
@@ -39,67 +47,50 @@ public class NodePartitioningVertexData extends VertexData {
   /**
    * Default constructor for reflection
    */
-  public NodePartitioningVertexData() {
+  public EdgePartitioningEdgeData() {
     super();
   }
 
-  public int getNodeColor() {
-    return nodeColor;
+  public long getEdgeId() {
+    return edgeId;
+  }
+
+  public void setEdgeId(long edgeId) {
+    this.edgeId = edgeId;
+  }
+
+  public int getEdgeColor() {
+    return edgeColor;
   }
 
   /**
    * Sets the new node color and checks if it has changed,
    * in that case it also sets the flag {@code hasColorChanged}
    *
-   * @param nodeColor the new color of the current vertex
+   * @param edgeColor the new color of the current vertex
    */
-  public void setNodeColor(int nodeColor) {
-    if (this.nodeColor != nodeColor) {
-      this.nodeColor = nodeColor;
+  public void setEdgeColor(int edgeColor) {
+    if (this.edgeColor != edgeColor) {
+      this.edgeColor = edgeColor;
       this.hasColorChanged = true;
     }
   }
 
-  /**
-   * Calculates the energy of the node according to <code>the number of
-   * neighbors - the number of neighbors in the same color</code>
-   *
-   * @return the energy of the current node (how many neighbors are of a
-   * different color)
-   */
-  public int getNodeEnergy() {
-    return super.getNumberOfNeighbors() -
-           getNumberOfNeighborsWithCurrentColor();
-  }
-
-  /**
-   * Simply calls <code>getNumberOfNeighbors</code> with the parameter of the
-   * current color.
-   *
-   * @return the number of neighbors which have the same color as the current
-   * node.
-   */
-  public int getNumberOfNeighborsWithCurrentColor() {
-    return super.getNumberOfNeighbors(getNodeColor());
-  }
-
   @Override
   public void readFields(DataInput input) throws IOException {
-    super.readFields(input);
-
-    this.nodeColor = input.readInt();
+    this.edgeId = input.readLong();
+    this.edgeColor = input.readInt();
   }
 
   @Override
   public void write(DataOutput output) throws IOException {
-    super.write(output);
-
-    output.writeInt(this.nodeColor);
+    output.writeLong(this.edgeId);
+    output.writeInt(this.edgeColor);
   }
 
   @Override
   public String toString() {
-    return Integer.toString(this.nodeColor);
+    return Integer.toString(this.edgeColor);
   }
 
   public boolean getHasColorChanged() {

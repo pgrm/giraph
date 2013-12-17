@@ -75,6 +75,36 @@ public abstract class BaseWritable implements Writable {
       }
     };
 
+  protected <T extends Writable> ValueReader<T> getWritableValueReader(
+    final Class<T> classLoader) {
+    return new ValueReader<T>() {
+      @Override
+      public T readValue(DataInput input) throws IOException {
+        T newInstance = null;
+
+        try {
+          newInstance = classLoader.newInstance();
+        } catch (InstantiationException e) {
+          throw new IOException(e);
+        } catch (IllegalAccessException e) {
+          throw new IOException(e);
+        }
+
+        newInstance.readFields(input);
+        return newInstance;
+      }
+    };
+  }
+
+  protected <T extends Writable> ValueWriter<T> getWritableValueWriter() {
+    return new ValueWriter<T>() {
+      @Override
+      public void writeValue(DataOutput output, T value) throws IOException {
+        value.write(output);
+      }
+    };
+  }
+
   /**
    * Functionality to parse a map out of the DataInput
    *
