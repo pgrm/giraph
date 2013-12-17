@@ -57,6 +57,11 @@ public class JaBeJaConfigurations {
   private static final int DEFAULT_RANDOM_SEED = 0;
 
   /**
+   * Default number for how many random nodes should be in the contact list
+   */
+  private static final int DEFAULT_NUMBER_OF_RANDOM_NEIGHBORS = 0;
+
+  /**
    * Configuration to read values from, defined as member,
    * so it's not necessary to pass it on as an argument to all the functions.
    */
@@ -135,5 +140,17 @@ public class JaBeJaConfigurations {
    */
   public int getRandomSeed() {
     return this.conf.getInt("JaBeJa.RandomSeed", DEFAULT_RANDOM_SEED);
+  }
+
+  /**
+   * How many additional random nodes should each node have in the contact
+   * list to exchange colors with
+   *
+   * @return the configured or default value for how many random additional
+   * neighbors each node should know
+   */
+  public int getNumberOfRandomNeighbors() {
+    return this.conf.getInt(
+      "JaBeJa.NumberOfRandomNeighbors", DEFAULT_NUMBER_OF_RANDOM_NEIGHBORS);
   }
 }

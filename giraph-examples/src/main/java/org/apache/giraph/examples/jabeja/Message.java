@@ -51,6 +51,12 @@ public class Message extends BaseWritable {
   private int color;
 
   /**
+   * Flag to set for the initialization to see if the message comes from a
+   * normal or random neighbor
+   */
+  private boolean isRandomNeighbor;
+
+  /**
    * The value calculated by JaBeJa-sum function
    * {@code NodePartitioningComputation.getJaBeJaSum()}
    */
@@ -65,11 +71,13 @@ public class Message extends BaseWritable {
   /**
    * Initializes the message for sending the current vertex color
    *
-   * @param vertexId the id of the vertex sending the message
-   * @param color    the color of the vertex sending the message
+   * @param vertexId         the id of the vertex sending the message
+   * @param color            the color of the vertex sending the message
+   * @param isRandomNeighbor flag if it is a regular neighbor or one from the
+   *                         random overlay
    */
-  public Message(long vertexId, int color) {
-    this(vertexId);
+  public Message(long vertexId, int color, boolean isRandomNeighbor) {
+    this(vertexId, isRandomNeighbor);
 
     this.color = color;
     this.messageType = Type.ColorUpdate;
@@ -81,9 +89,13 @@ public class Message extends BaseWritable {
    * @param vertexId              the id of the vertex sending the message
    * @param neighboringColorRatio the neighboring color ratio of the vertex
    *                              sending this message
+   * @param isRandomNeighbor      flag if it is a regular neighbor or one
+   *                              from the random overlay
    */
-  public Message(long vertexId, Map<Integer, Integer> neighboringColorRatio) {
-    this(vertexId);
+  public Message(
+    long vertexId, Map<Integer, Integer> neighboringColorRatio,
+    boolean isRandomNeighbor) {
+    this(vertexId, isRandomNeighbor);
 
     this.neighboringColorRatio = neighboringColorRatio;
     this.messageType = Type.DegreeUpdate;
@@ -96,9 +108,13 @@ public class Message extends BaseWritable {
    *                                       message
    * @param improvedNeighboringColorsValue the new value calculated by
    *                                       JaBeJa-sum
+   * @param isRandomNeighbor               flag if it is a regular neighbor
+   *                                       or one from the random overlay
    */
-  public Message(long vertexId, double improvedNeighboringColorsValue) {
-    this(vertexId);
+  public Message(
+    long vertexId, double improvedNeighboringColorsValue,
+    boolean isRandomNeighbor) {
+    this(vertexId, isRandomNeighbor);
 
     this.improvedNeighboringColorsValue = improvedNeighboringColorsValue;
     this.messageType = Type.ColorExchangeInitialization;
@@ -108,11 +124,14 @@ public class Message extends BaseWritable {
    * Initialize the message with the source vertex id for color exchange
    * initialization
    *
-   * @param vertexId the id of the vertex sending the message
+   * @param vertexId         the id of the vertex sending the message
+   * @param isRandomNeighbor flag if it is a regular neighbor or one from the
+   *                         random overlay
    */
-  public Message(long vertexId) {
+  public Message(long vertexId, boolean isRandomNeighbor) {
     this.messageType = Type.ConfirmColorExchange;
     this.vertexId = vertexId;
+    this.isRandomNeighbor = isRandomNeighbor;
   }
 
   public long getVertexId() {
@@ -127,6 +146,10 @@ public class Message extends BaseWritable {
     return color;
   }
 
+  public boolean isRandomNeighbor() {
+    return isRandomNeighbor;
+  }
+
   public double getImprovedNeighboringColorsValue() {
     return improvedNeighboringColorsValue;
   }
@@ -139,6 +162,7 @@ public class Message extends BaseWritable {
   public void readFields(DataInput dataInput) throws IOException {
     this.vertexId = dataInput.readLong();
     int typeValue = dataInput.readInt();
+    this.isRandomNeighbor = dataInput.readBoolean();
 
     this.messageType = Type.convertToType(typeValue);
     switch (this.messageType) {
@@ -159,6 +183,7 @@ public class Message extends BaseWritable {
   public void write(DataOutput dataOutput) throws IOException {
     dataOutput.writeLong(this.vertexId);
     dataOutput.writeInt(this.messageType.getValue());
+    dataOutput.writeBoolean(this.isRandomNeighbor);
 
     switch (this.messageType) {
     case ColorUpdate:

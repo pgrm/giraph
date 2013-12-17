@@ -29,10 +29,21 @@ import java.util.Map;
  */
 public class VertexData extends BaseWritable {
   /**
-   * The key is the id of the neighbor, the value is the color.
-   * this property is stored
+   * The key is the id of the neighbor, the value is the color and further
+   * information.
+   * This property is stored
    */
   private final Map<Long, NeighborInformation> neighborInformation =
+    new HashMap<Long, NeighborInformation>();
+
+  /**
+   * For a random overlay network on top of the graph to find even more nodes
+   * to exchange the color with.
+   * The key is the id of the random neighbor, the value is the color and
+   * further information.
+   * This property is stored
+   */
+  private final Map<Long, NeighborInformation> randomNeighborInformation =
     new HashMap<Long, NeighborInformation>();
 
   /**
@@ -75,8 +86,33 @@ public class VertexData extends BaseWritable {
     return this.neighborInformation.keySet();
   }
 
+  /**
+   * Returns a list of IDs of all the random neighbors.
+   *
+   * @return a list of IDs of all the random neighbors.
+   */
+  public Iterable<Long> getRandomNeighbors() {
+    return this.randomNeighborInformation.keySet();
+  }
+
   public Map<Long, NeighborInformation> getNeighborInformation() {
     return neighborInformation;
+  }
+
+  public Map<Long, NeighborInformation> getRandomNeighborInformation() {
+    return randomNeighborInformation;
+  }
+
+  /**
+   * Checks if a neighborId is random, if it returns false it doesn't mean
+   * that it is a normal neighbor, just that it isn't a random one.
+   *
+   * @param neighborId the ID of the neighbor to be checked
+   * @return true if it exists in the randomNeighborInformation-map,
+   * false otherwise
+   */
+  public boolean isRandomNeighbor(long neighborId) {
+    return this.randomNeighborInformation.containsKey(neighborId);
   }
 
   /**
@@ -84,20 +120,35 @@ public class VertexData extends BaseWritable {
    * neighbor and its color and set the flag
    * {@code haveColoredDegreesChanged} to true
    *
-   * @param neighborId    the id of the neighbor (could be node or edge)
-   * @param neighborColor the color of the neighbor
+   * @param neighborId       the id of the neighbor (could be node or edge)
+   * @param neighborColor    the color of the neighbor
+   * @param isRandomNeighbor flag if it is a regular neighbor or one from the
+   *                         random overlay
    */
-  public void setNeighborWithColor(long neighborId, int neighborColor) {
-    NeighborInformation info = this.neighborInformation.get(neighborId);
+  public void setNeighborWithColor(
+    long neighborId, int neighborColor, boolean isRandomNeighbor) {
+
+    Map<Long, NeighborInformation> neighborsMap;
+
+    if (isRandomNeighbor) {
+      neighborsMap = this.randomNeighborInformation;
+    } else {
+      neighborsMap = this.neighborInformation;
+    }
+
+    NeighborInformation info = neighborsMap.get(neighborId);
 
     if ((info != null && info.getColor() != neighborColor) || (info == null)) {
       if (info == null) {
         info = new NeighborInformation();
-        this.neighborInformation.put(neighborId, info);
+        neighborsMap.put(neighborId, info);
       }
 
       info.setColor(neighborColor);
-      this.haveColoredDegreesChanged = true;
+
+      if (!isRandomNeighbor) {
+        this.haveColoredDegreesChanged = true;
+      }
     }
   }
 
@@ -107,15 +158,26 @@ public class VertexData extends BaseWritable {
    *
    * @param neighborId            the id of the neighbor (could be node or edge)
    * @param neighboringColorRatio the neighboring color ratio of this neighbor
+   * @param isRandomNeighbor      flag if it is a regular neighbor or one
+   *                              from the random overlay
    */
   public void setNeighborWithColorRatio(
-    long neighborId, Map<Integer, Integer> neighboringColorRatio) {
+    long neighborId, Map<Integer, Integer> neighboringColorRatio,
+    boolean isRandomNeighbor) {
 
-    NeighborInformation info = this.neighborInformation.get(neighborId);
+    Map<Long, NeighborInformation> neighborsMap;
+
+    if (isRandomNeighbor) {
+      neighborsMap = this.randomNeighborInformation;
+    } else {
+      neighborsMap = this.neighborInformation;
+    }
+
+    NeighborInformation info = neighborsMap.get(neighborId);
 
     if (info == null) {
       info = new NeighborInformation();
-      this.neighborInformation.put(neighborId, info);
+      neighborsMap.put(neighborId, info);
     }
 
     info.setNeighboringColorRatio(neighboringColorRatio);
@@ -167,12 +229,14 @@ public class VertexData extends BaseWritable {
 
   @Override
   public void readFields(DataInput input) throws IOException {
-    readNeighboringColors(input);
+    readNeighboringColors(input, this.neighborInformation);
+    readNeighboringColors(input, this.randomNeighborInformation);
   }
 
   @Override
   public void write(DataOutput output) throws IOException {
-    writeNeighboringColors(output);
+    writeNeighboringColors(output, this.neighborInformation);
+    writeNeighboringColors(output, this.randomNeighborInformation);
   }
 
   /**
@@ -195,10 +259,14 @@ public class VertexData extends BaseWritable {
    * includes the colors of all the neighbors, to be able to compute the
    * algorithm for changing the color at all times
    *
-   * @param input DataInput from readFields
+   * @param input     DataInput from readFields
+   * @param neighbors the map of neighbors into which data will be parsed
    */
-  private void readNeighboringColors(DataInput input) throws IOException {
-    readMap(input, this.neighborInformation, LONG_VALUE_READER,
+  private void readNeighboringColors(
+    DataInput input,
+    Map<Long, NeighborInformation> neighbors) throws IOException {
+
+    readMap(input, neighbors, LONG_VALUE_READER,
       new ValueReader<NeighborInformation>() {
         @Override
         public NeighborInformation readValue(DataInput input)
@@ -218,10 +286,14 @@ public class VertexData extends BaseWritable {
    * Opposite to readNeighboringColors this method is to store the
    * color information of all the neighbors.
    *
-   * @param output DataOutput from write
+   * @param output    DataOutput from write
+   * @param neighbors the map of neighbors from which data will be serialized
    */
-  private void writeNeighboringColors(DataOutput output) throws IOException {
-    writeMap(output, neighborInformation, LONG_VALUE_WRITER,
+  private void writeNeighboringColors(
+    DataOutput output,
+    Map<Long, NeighborInformation> neighbors) throws IOException {
+
+    writeMap(output, neighbors, LONG_VALUE_WRITER,
       new ValueWriter<NeighborInformation>() {
         @Override
         public void writeValue(

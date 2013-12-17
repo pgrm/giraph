@@ -31,11 +31,11 @@ import java.io.IOException;
  * A simple output format for vertices for the Node-Partitioning Problem
  */
 public class NodePartitioningVertexOutputFormat extends
-        TextVertexOutputFormat<LongWritable, NodePartitioningVertexData,
-                IntWritable> {
+  TextVertexOutputFormat<LongWritable, NodePartitioningVertexData,
+    IntWritable> {
   @Override
   public TextVertexWriter createVertexWriter(
-          TaskAttemptContext context) throws IOException, InterruptedException {
+    TaskAttemptContext context) throws IOException, InterruptedException {
     return new NodePartitioningVertexWriter();
   }
 
@@ -44,12 +44,12 @@ public class NodePartitioningVertexOutputFormat extends
    * node has.
    */
   private class NodePartitioningVertexWriter
-          extends TextVertexWriterToEachLine {
+    extends TextVertexWriterToEachLine {
 
     @Override
     protected Text convertVertexToLine(
-            Vertex<LongWritable, NodePartitioningVertexData,
-                    IntWritable> vertex) throws IOException {
+      Vertex<LongWritable, NodePartitioningVertexData,
+        IntWritable> vertex) throws IOException {
       StringBuilder sb = new StringBuilder();
       NodePartitioningVertexData value = vertex.getValue();
 

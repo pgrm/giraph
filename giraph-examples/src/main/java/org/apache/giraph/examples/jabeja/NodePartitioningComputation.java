@@ -119,6 +119,7 @@ public class NodePartitioningComputation extends
     if (super.getSuperstep() == 0) {
       initializeColor();
       announceInitialColor();
+      initializeRandomNeighbors();
     } else {
       storeColorsOfNodes(messages);
       announceColorToNewNeighbors(messages);
@@ -151,8 +152,9 @@ public class NodePartitioningComputation extends
       if (partner.getKey() != null) {
         this.vertex.getValue().setChosenPartnerIdForExchange(partner.getKey());
         LOG.trace(this.vertex.getId().get() +
-                 ": Initialize Color-Exchange with " + partner.getKey());
-        initiateColoExchangeHandshake(partner);
+                  ": Initialize Color-Exchange with " + partner.getKey());
+        initiateColoExchangeHandshake(partner,
+          this.vertex.getValue().isRandomNeighbor(partner.getKey()));
       } else {
         this.vertex.getValue().setChosenPartnerIdForExchange(-1);
         // if no partner could be found, this node probably has already the
@@ -184,9 +186,30 @@ public class NodePartitioningComputation extends
     int myColor = (int) getRandomNumber(numberOfColors);
 
     LOG.trace("Chose color " + myColor + " out of " + numberOfColors +
-             " colors");
+              " colors");
 
     this.vertex.getValue().setNodeColor(myColor);
+  }
+
+  /**
+   * Selects random nodes for later color exchanges and sends them the current
+   * color
+   */
+  private void initializeRandomNeighbors() {
+    int numberOfRandomNeighbors = this.conf.getNumberOfRandomNeighbors();
+    NodePartitioningVertexData vertexData = this.vertex.getValue();
+    Map<Long, ?> neighbors = vertexData.getNeighborInformation();
+
+    while (numberOfRandomNeighbors > 0) {
+      long randomNeighborId = getRandomNumber(super.getTotalNumVertices());
+
+      if (randomNeighborId != this.vertex.getId().get() &&
+          !neighbors.containsKey(randomNeighborId)) {
+        // one good random neighbor found
+        numberOfRandomNeighbors--;
+        sendCurrentVertexColor(new LongWritable(randomNeighborId), true);
+      }
+    }
   }
 
   /**
@@ -196,7 +219,10 @@ public class NodePartitioningComputation extends
   private void announceColorIfChanged() {
     if (this.vertex.getValue().getHasColorChanged()) {
       for (Long neighborId : this.vertex.getValue().getNeighbors()) {
-        sendCurrentVertexColor(new LongWritable(neighborId));
+        sendCurrentVertexColor(new LongWritable(neighborId), false);
+      }
+      for (Long neighborId : this.vertex.getValue().getRandomNeighbors()) {
+        sendCurrentVertexColor(new LongWritable(neighborId), true);
       }
       this.vertex.getValue().resetHasColorChanged();
     }
@@ -207,7 +233,7 @@ public class NodePartitioningComputation extends
    */
   private void announceInitialColor() {
     for (Edge<LongWritable, IntWritable> edge : this.vertex.getEdges()) {
-      sendCurrentVertexColor(edge.getTargetVertexId());
+      sendCurrentVertexColor(edge.getTargetVertexId(), false);
     }
   }
 
@@ -220,7 +246,7 @@ public class NodePartitioningComputation extends
   private void storeColorsOfNodes(Iterable<Message> messages) {
     for (Message msg : messages) {
       this.vertex.getValue().setNeighborWithColor(msg.getVertexId(),
-        msg.getColor());
+        msg.getColor(), msg.isRandomNeighbor());
     }
   }
 
@@ -231,7 +257,8 @@ public class NodePartitioningComputation extends
    */
   private void announceColorToNewNeighbors(Iterable<Message> messages) {
     for (Message msg : messages) {
-      sendCurrentVertexColor(new LongWritable(msg.getVertexId()));
+      sendCurrentVertexColor(new LongWritable(msg.getVertexId()),
+        msg.isRandomNeighbor());
     }
   }
 
@@ -253,7 +280,12 @@ public class NodePartitioningComputation extends
     for (Long neighborId : this.vertex.getValue().getNeighbors()) {
       super.sendMessage(new LongWritable(neighborId),
         new Message(this.vertex.getId().get(),
-          this.vertex.getValue().getNeighboringColorRatio()));
+          this.vertex.getValue().getNeighboringColorRatio(), false));
+    }
+    for (Long neighborId : this.vertex.getValue().getRandomNeighbors()) {
+      super.sendMessage(new LongWritable(neighborId),
+        new Message(this.vertex.getId().get(),
+          this.vertex.getValue().getNeighboringColorRatio(), true));
     }
   }
 
@@ -266,23 +298,55 @@ public class NodePartitioningComputation extends
   private void storeColoredDegreesOfNodes(Iterable<Message> messages) {
     for (Message message : messages) {
       this.vertex.getValue().setNeighborWithColorRatio(
-        message.getVertexId(), message.getNeighboringColorRatio());
+        message.getVertexId(), message.getNeighboringColorRatio(),
+        message.isRandomNeighbor());
     }
   }
 
   /**
-   * Finds the best partner to exchange their colors with each other.
+   * Finds the best partner to exchange their colors with each other. Looking
+   * for normal as well as random neighbors
    *
    * @return the vertex ID of the partner with whom the colors will be
    * exchanged
    */
   private Map.Entry<Long, Double> findPartner() {
+    NodePartitioningVertexData data = this.vertex.getValue();
+
+    Map.Entry<Long, Double> firstPartner =
+      findPartner(data.getNeighborInformation());
+    Map.Entry<Long, Double> randomPartner =
+      findPartner(data.getRandomNeighborInformation());
+
+    if (firstPartner.getKey() == null) {
+      return randomPartner;
+    } else if (randomPartner.getKey() == null) {
+      return firstPartner;
+    } else if (firstPartner.getValue() >= randomPartner.getKey()) {
+      return firstPartner;
+    } else {
+      return randomPartner;
+    }
+  }
+
+  /**
+   * Internal implementation of findPartner which can be called with the
+   * collection of normal neighbors or random neighbors
+   *
+   * @param neighbors collection of neighbors from which the partner is to be
+   *                  found
+   * @return the vertex ID of the partner with whom the colors will be
+   * exchanged
+   */
+  private Map.Entry<Long, Double> findPartner(
+    Map<Long, VertexData.NeighborInformation> neighbors) {
+
     double highest = 0;
     Long bestPartner = null;
     NodePartitioningVertexData data = this.vertex.getValue();
 
     for (Map.Entry<Long, VertexData.NeighborInformation> neighbor :
-      data.getNeighborInformation().entrySet()) {
+      neighbors.entrySet()) {
 
       int myDegree = data.getNumberOfNeighborsWithCurrentColor();
       int neighborsDegree =
@@ -310,13 +374,19 @@ public class NodePartitioningComputation extends
    * initialize the color-exchange handshake by sending a simple message to
    * the partner
    *
-   * @param partner the vertex with whom I want to exchange colors
-   *                (key = vertex id,
-   *                value = JaBeJa-sum for the finished exchange)
+   * @param partner          the vertex with whom I want to exchange colors
+   *                         (key = vertex id,
+   *                         value = JaBeJa-sum for the finished exchange)
+   * @param isRandomNeighbor flag if it is a regular neighbor or one from the
+   *                         random overlay
    */
-  private void initiateColoExchangeHandshake(Map.Entry<Long, Double> partner) {
+
+  private void initiateColoExchangeHandshake(
+    Map.Entry<Long, Double> partner, boolean isRandomNeighbor) {
+
     super.sendMessage(new LongWritable(partner.getKey()),
-      new Message(this.vertex.getId().get(), partner.getValue()));
+      new Message(this.vertex.getId().get(), partner.getValue(),
+        isRandomNeighbor));
   }
 
   /**
@@ -376,7 +446,7 @@ public class NodePartitioningComputation extends
           }
         }
         LOG.trace(this.vertex.getId().get() +
-                 ": second confirmation to " + preferredPartner);
+                  ": second confirmation to " + preferredPartner);
         confirmColorExchangeWithPartner(preferredPartner);
       }
       break;
@@ -384,7 +454,7 @@ public class NodePartitioningComputation extends
       Long finalPartnerId = getBestOfferedPartnerIdForExchange(messages);
 
       LOG.trace(this.vertex.getId().get() +
-               ": got a final reply from " + finalPartnerId);
+                ": got a final reply from " + finalPartnerId);
       if (finalPartnerId != null &&
           finalPartnerId == vertexData.getChosenPartnerIdForExchange()) {
         LOG.trace("It fits - let's exchange");
@@ -432,7 +502,8 @@ public class NodePartitioningComputation extends
    */
   private void confirmColorExchangeWithPartner(long partnerId) {
     super.sendMessage(new LongWritable(partnerId),
-      new Message(this.vertex.getId().get()));
+      new Message(this.vertex.getId().get(),
+        this.vertex.getValue().isRandomNeighbor(partnerId)));
     this.vertex.getValue().setChosenPartnerIdForExchange(partnerId);
   }
 
@@ -445,9 +516,15 @@ public class NodePartitioningComputation extends
    * @param partnerId the id of the color exchanging partner
    */
   private void exchangeColors(long partnerId) {
-    int newColor =
-      this.vertex.getValue().getNeighborInformation().
-        get(partnerId).getColor();
+    NodePartitioningVertexData vertexData = this.vertex.getValue();
+    int newColor;
+
+    if (vertexData.isRandomNeighbor(partnerId)) {
+      newColor =
+        vertexData.getRandomNeighborInformation().get(partnerId).getColor();
+    } else {
+      newColor = vertexData.getNeighborInformation().get(partnerId).getColor();
+    }
 
     this.vertex.getValue().setNodeColor(newColor);
   }
@@ -515,11 +592,16 @@ public class NodePartitioningComputation extends
    * Send a message to a vertex with the current color and id,
    * so that this vertex would be able to reply.
    *
-   * @param targetId id of the vertex to which the message should be sent
+   * @param targetId         id of the vertex to which the message should be
+   *                         sent
+   * @param isRandomNeighbor flag if it is a regular neighbor or one from the
+   *                         random overlay
    */
-  private void sendCurrentVertexColor(LongWritable targetId) {
+  private void sendCurrentVertexColor(
+    LongWritable targetId, boolean isRandomNeighbor) {
+
     super.sendMessage(targetId, new Message(this.vertex.getId().get(),
-      this.vertex.getValue().getNodeColor()));
+      this.vertex.getValue().getNodeColor(), isRandomNeighbor));
   }
 
   /**
