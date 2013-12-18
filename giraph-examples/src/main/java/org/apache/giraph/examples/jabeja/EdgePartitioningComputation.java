@@ -26,6 +26,7 @@ import org.apache.hadoop.io.WritableComparable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -233,48 +234,59 @@ public class EdgePartitioningComputation extends
     switch (mode) {
     case 0:
       if (preferredPartner > -1) {
-        EdgePartitioningMessage partnerId =
-          getBestOfferedPartnerIdForExchange(messages);
+        EdgePartitioningMessage partner =
+          getBestOfferedPartnerForExchange(messages);
 
         LOG.trace(
-          super.vertex.getId().get() + ": best offer from " + partnerId);
-        if (partnerId != null) {
+          super.vertex.getId().get() + ": best offer from " + partner);
+        if (partner != null) {
           long desiredPartnerId = vertexData.getChosenPartnerIdForExchange();
 
-          if (partnerId == desiredPartnerId) {
+          if (partner.getSourceId() == desiredPartnerId) {
             LOG.trace("Direct match - let's exchange");
-            exchangeColors(partnerId);
+            exchangeColors(partner.getSourceId());
             vertexData.setChosenPartnerIdForExchange(-1); // reset partner
           } else {
             LOG.trace("Send confirmation");
-            confirmColorExchangeWithPartner(partnerId);
+            confirmColorExchangeWithPartner(partner);
           }
         }
       }
       break;
     case 1:
       if (preferredPartner > -1) {
+        EdgePartitioningMessage newPartner = null;
         // has previously preferred partner answered?
         if (messages.iterator().hasNext()) {
           // switch the vertex id with a 50:50 chance
           if (getRandomNumber(2) == 1) {
-            preferredPartner = messages.iterator().next().getSourceId();
+            newPartner = messages.iterator().next();
+            preferredPartner = newPartner.getSourceId();
           }
         }
         LOG.trace(super.vertex.getId().get() +
                   ": second confirmation to " + preferredPartner);
-        confirmColorExchangeWithPartner(preferredPartner);
+
+        if (newPartner == null) {
+          confirmColorExchangeWithPartner();
+        } else {
+          confirmColorExchangeWithPartner(newPartner);
+        }
       }
       break;
     case 2:
-      Long finalPartnerId = getBestOfferedPartnerIdForExchange(messages);
+      if (preferredPartner > -1) {
+        EdgePartitioningMessage finalPartner =
+          getBestOfferedPartnerForExchange(messages);
 
-      LOG.trace(super.vertex.getId().get() +
-                ": got a final reply from " + finalPartnerId);
-      if (finalPartnerId != null &&
-          finalPartnerId == vertexData.getChosenPartnerIdForExchange()) {
-        LOG.trace("It fits - let's exchange");
-        exchangeColors(finalPartnerId);
+        LOG.trace(super.vertex.getId().get() +
+                  ": got a final reply from " + finalPartner);
+        if (finalPartner != null &&
+            finalPartner.getSourceId() ==
+            vertexData.getChosenPartnerIdForExchange()) {
+          LOG.trace("It fits - let's exchange");
+          exchangeColors(finalPartner.getSourceId());
+        }
       }
       announceColorIfChanged();
       break;
@@ -309,22 +321,29 @@ public class EdgePartitioningComputation extends
   /**
    * Send a confirmation to the partner and set it as the new preferred partner
    *
-   * @param partnerId the id of the vertex with whom the exchange is planned
+   * @param message the message to which the color exchange will be confirmed
    */
   private void confirmColorExchangeWithPartner(
     EdgePartitioningMessage message) {
-
-    long vertexId = extractVertexId(message.getSourceId());
-
-    super.sendMessage(new LongWritable(vertexId),
-      new EdgePartitioningMessage(
-        message.getPartnerEdgeId(), message.getSourceId(),
-        super.vertex.getValue().isRandomNeighbor(message.getSourceId())));
 
     super.vertex.getValue()
       .setChosenPartnerIdForExchange(message.getSourceId());
     super.vertex.getValue().setChosenEdgeId(message.getPartnerEdgeId());
   }
+
+  private void confirmColorExchangeWithPartner() {
+    EdgePartitioningVertexData vertexData = super.vertex.getValue();
+
+    long vertexId = extractVertexId(vertexData.getChosenPartnerIdForExchange());
+
+    super.sendMessage(new LongWritable(vertexId),
+      new EdgePartitioningMessage(
+        vertexData.getChosenEdgeId(),  // local edge id
+        vertexData.getChosenPartnerIdForExchange(), // partner edge id (remote)
+        vertexData.isRandomNeighbor( // is partner random neighbor
+          vertexData.getChosenPartnerIdForExchange())));
+  }
+
 
   /**
    * Internal implementation of findPartner which can be called with the
@@ -389,24 +408,24 @@ public class EdgePartitioningComputation extends
    * @param messages incoming exchange offers
    * @return the best offer from the incoming messages
    */
-  private Long getBestOfferedPartnerIdForExchange(
+  private EdgePartitioningMessage getBestOfferedPartnerForExchange(
     Iterable<EdgePartitioningMessage> messages) {
     long desiredPartnerId =
       super.vertex.getValue().getChosenPartnerIdForExchange();
-    Long partnerId = null;
+    EdgePartitioningMessage partner = null;
     double bestValue = 0;
 
     for (EdgePartitioningMessage message : messages) {
       if (message.getSourceId() == desiredPartnerId) {
-        partnerId = message.getSourceId();
+        partner = message;
         break;
       } else if (message.getImprovedNeighboringColorsValue() > bestValue) {
-        partnerId = message.getSourceId();
+        partner = message;
         bestValue = message.getImprovedNeighboringColorsValue();
       }
     }
 
-    return partnerId;
+    return partner;
   }
 
   private Map<Integer, Integer> getNeighboringColorRatio(
@@ -513,6 +532,55 @@ public class EdgePartitioningComputation extends
     }
 
     return edges;
+  }
+
+  /**
+   * Announces the color, only if it has changed after it has been announced
+   * the last time
+   */
+  private void announceColorIfChanged() {
+    Set<Long> sentNodes;
+    EdgePartitioningVertexData vertexData = super.vertex.getValue();
+
+    for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
+      super.vertex.getEdges()) {
+
+      sentNodes = new HashSet<Long>();
+      if (edge.getValue().hasColorChanged()) {
+        for (long neighborId :
+          vertexData.getVertexConnections(super.vertex.getId().get())) {
+
+          long vertexId = extractVertexId(neighborId);
+
+          if (sentNodes.add(vertexId)) {
+            super.sendMessage(new LongWritable(vertexId),
+              new EdgePartitioningMessage(this.vertex.getId().get(), false,
+                getIterableEdge(edge)));
+          }
+        }
+
+        for (long neighborId :
+          vertexData.getVertexConnections(edge.getTargetVertexId().get())) {
+
+          long vertexId = extractVertexId(neighborId);
+
+          if (sentNodes.add(vertexId)) {
+            super.sendMessage(new LongWritable(vertexId),
+              new EdgePartitioningMessage(this.vertex.getId().get(), false,
+                getIterableEdge(edge)));
+          }
+        }
+      }
+    }
+  }
+
+  private Iterable<Edge<LongWritable, EdgePartitioningEdgeData>>
+  getIterableEdge(Edge<LongWritable, EdgePartitioningEdgeData> edge) {
+
+    List<Edge<LongWritable, EdgePartitioningEdgeData>> lst =
+      new LinkedList<Edge<LongWritable, EdgePartitioningEdgeData>>();
+    lst.add(edge);
+    return lst;
   }
 
   private Long extractVertexId(Long edgeId) {

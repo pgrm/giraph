@@ -32,14 +32,29 @@ import java.util.Map;
  *
  */
 public class EdgePartitioningMessage extends BaseMessage {
+  /**
+   *
+   */
   private long partnerEdgeId;
   private double improvedNeighboringColorsValue;
   private Map<Integer, Integer> neighboringColorRatio =
     new HashMap<Integer, Integer>();
 
+  /**
+   * the edges connected to the source vertex to update them in the local
+   * neighbor collection
+   */
   private List<Edge<LongWritable, EdgePartitioningEdgeData>> connectedEdges =
     new ArrayList<Edge<LongWritable, EdgePartitioningEdgeData>>();
 
+  /**
+   * Constructor to send an update of the edges to neighbors
+   *
+   * @param sourceId         the id of the vertex sending the message
+   * @param isRandomNeighbor flag if it is a random or normal neighbor
+   * @param edges            the changed edges, in the beginning all,
+   *                         later on only one by one
+   */
   public EdgePartitioningMessage(
     long sourceId, boolean isRandomNeighbor,
     Iterable<Edge<LongWritable, EdgePartitioningEdgeData>> edges) {
@@ -68,6 +83,18 @@ public class EdgePartitioningMessage extends BaseMessage {
     this.neighboringColorRatio = neighboringColorRatio;
   }
 
+  /**
+   * Constructor for initializing the color exchange
+   *
+   * @param localEdgeId                    id of the local edge which will
+   *                                       switch the color
+   * @param partnerEdgeId                  id of the remote partner edge
+   *                                       which shall switch the color
+   * @param improvedNeighboringColorsValue the value by which the local
+   *                                       ratios would be improved
+   * @param isRandomNeighbor               flag if it is a random or normal
+   *                                       neighbor
+   */
   public EdgePartitioningMessage(
     long localEdgeId, long partnerEdgeId,
     double improvedNeighboringColorsValue, boolean isRandomNeighbor) {
@@ -77,6 +104,14 @@ public class EdgePartitioningMessage extends BaseMessage {
     this.improvedNeighboringColorsValue = improvedNeighboringColorsValue;
   }
 
+  /**
+   * Constructor for confirming a color exchange
+   *
+   * @param localEdgeId      id of the local edge which will switch the color
+   * @param partnerEdgeId    id of the remote partner edge which shall switch
+   *                         the color
+   * @param isRandomNeighbor flag if it is a random or normal neighbor
+   */
   public EdgePartitioningMessage(
     long localEdgeId, long partnerEdgeId, boolean isRandomNeighbor) {
     super(localEdgeId, isRandomNeighbor, Type.ConfirmColorExchange);
@@ -132,6 +167,12 @@ public class EdgePartitioningMessage extends BaseMessage {
     }
   }
 
+  /**
+   * serializes and writes edges from the connectedEdges collection
+   *
+   * @param output DataOutput from {@code write}
+   * @throws IOException forwarded exception from output.writeX
+   */
   private void writeEdges(DataOutput output) throws IOException {
     super.writeCollection(output, connectedEdges,
       new ValueWriter<Edge<LongWritable, EdgePartitioningEdgeData>>() {
@@ -147,6 +188,12 @@ public class EdgePartitioningMessage extends BaseMessage {
       });
   }
 
+  /**
+   * reads and parses edges into the connectedEdges collection
+   *
+   * @param input DataInput from {@code readFields}
+   * @throws IOException forwarded exception from input.readX
+   */
   private void readEdges(DataInput input) throws IOException {
     super.readCollection(input, connectedEdges,
       new ValueReader<Edge<LongWritable, EdgePartitioningEdgeData>>() {
