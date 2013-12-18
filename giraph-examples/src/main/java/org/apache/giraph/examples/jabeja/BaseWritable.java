@@ -75,6 +75,17 @@ public abstract class BaseWritable implements Writable {
       }
     };
 
+  /**
+   * Creates a default ValueReader instance which uses internally the
+   * {@code readFields}-method of the Writable type,
+   * can be used for readMap/readCollection
+   *
+   * @param classLoader the class-type to be able to create a new instance of
+   *                    T for reading the actual value
+   * @param <T>         Type which will be read
+   * @return ValueReader for the specific type,
+   * can be used for writeMap/writeCollection
+   */
   protected <T extends Writable> ValueReader<T> getWritableValueReader(
     final Class<T> classLoader) {
     return new ValueReader<T>() {
@@ -96,6 +107,15 @@ public abstract class BaseWritable implements Writable {
     };
   }
 
+  /**
+   * Creates a default ValueWriter instance which uses internally the
+   * {@code write}-method of the Writable type,
+   * can be used for writeMap/writeCollection
+   *
+   * @param <T> Type which will be written
+   * @return ValueWriter for the specific type,
+   * can be used for writeMap/writeCollection
+   */
   protected <T extends Writable> ValueWriter<T> getWritableValueWriter() {
     return new ValueWriter<T>() {
       @Override

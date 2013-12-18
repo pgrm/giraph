@@ -96,8 +96,8 @@ public class EdgePartitioningComputation extends
     for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
       this.vertex.getEdges()) {
 
-      super.sendMessage(edge.getTargetVertexId(), new EdgePartitioningMessage
-        (this.vertex.getId().get(), false, this.vertex.getEdges()));
+      super.sendMessage(edge.getTargetVertexId(), new EdgePartitioningMessage(
+        this.vertex.getId().get(), false, this.vertex.getEdges()));
     }
   }
 
@@ -128,8 +128,8 @@ public class EdgePartitioningComputation extends
 
     for (EdgePartitioningMessage msg : messages) {
       super.sendMessage(new LongWritable(msg.getSourceId()),
-        new EdgePartitioningMessage
-          (this.vertex.getId().get(), false, transformNeighborsToEdges()));
+        new EdgePartitioningMessage(
+          this.vertex.getId().get(), false, transformNeighborsToEdges()));
     }
   }
 
@@ -331,6 +331,10 @@ public class EdgePartitioningComputation extends
     super.vertex.getValue().setChosenEdgeId(message.getPartnerEdgeId());
   }
 
+  /**
+   * sends a confirmation message to the desired partner including the
+   * local vertexId as well as the remote vertexId which should exchange colors
+   */
   private void confirmColorExchangeWithPartner() {
     EdgePartitioningVertexData vertexData = super.vertex.getValue();
 
@@ -340,7 +344,7 @@ public class EdgePartitioningComputation extends
       new EdgePartitioningMessage(
         vertexData.getChosenEdgeId(),  // local edge id
         vertexData.getChosenPartnerIdForExchange(), // partner edge id (remote)
-        vertexData.isRandomNeighbor( // is partner random neighbor
+        vertexData.isRandomNeighbor(
           vertexData.getChosenPartnerIdForExchange())));
   }
 
@@ -428,6 +432,17 @@ public class EdgePartitioningComputation extends
     return partner;
   }
 
+  /**
+   * Calculates the neighboring color ratio for a given edge,
+   * which is the sum of the neighboring color ratio of the current vertex
+   * (the source vertex) together with the neighboring color ratio of the
+   * target vertex. It also takes the edge itself into account and subtracts
+   * it from the color ratio which is returned
+   *
+   * @param edge the edge for which the color ratio should be calculated
+   * @return a map with colors of connected edges and how often each color
+   * exists (histogram)
+   */
   private Map<Integer, Integer> getNeighboringColorRatio(
     Edge<LongWritable, EdgePartitioningEdgeData> edge) {
 
@@ -454,6 +469,16 @@ public class EdgePartitioningComputation extends
     return targetVertexColorRatio;
   }
 
+  /**
+   * Merges to color ratios together, by adding the additionalColorRatio to
+   * the baseColorRatio
+   *
+   * @param baseColorRatio       the colorRatio which is going to be modified
+   *                             and returned afterwards
+   * @param additionalColorRatio the colorRatio which is going to be added on
+   *                             top of the base, and not modified
+   * @return the modified baseColorRatio
+   */
   private Map<Integer, Integer> mergeColorRatios(
     Map<Integer, Integer> baseColorRatio,
     Map<Integer, Integer> additionalColorRatio) {
@@ -472,12 +497,26 @@ public class EdgePartitioningComputation extends
     return baseColorRatio;
   }
 
+  /**
+   * Initializes the color ratio of the current vertex,
+   * which is cached since it's used several times and doesn't change
+   */
   private void initializeColorRatioOfCurrentVertex() {
     this.colorRatioOfCurrentVertex =
       super.vertex.getValue().getNeighboringColorRatio(
         super.vertex.getId().get());
   }
 
+  /**
+   * returns the number of neighbors with the same color as specified for any
+   * given colorRatio. In case the color doesn't exist in the ratio,
+   * it returns 0
+   *
+   * @param colorRatio the color ratio for which the code should run
+   * @param color      the color
+   * @return number of neighbors with the {@code color} or 0 if there are no
+   * such neighbors
+   */
   private int getNumberOfNeighborsWithSameColor(
     Map<Integer, Integer> colorRatio, int color) {
 
@@ -547,6 +586,7 @@ public class EdgePartitioningComputation extends
 
       sentNodes = new HashSet<Long>();
       if (edge.getValue().hasColorChanged()) {
+        edge.getValue().resetHasColorChanged();
         for (long neighborId :
           vertexData.getVertexConnections(super.vertex.getId().get())) {
 
@@ -574,6 +614,13 @@ public class EdgePartitioningComputation extends
     }
   }
 
+  /**
+   * Transforms a simple edge into an iterable, so it can be sent with the
+   * ColorUpdate message
+   *
+   * @param edge the edge which should be sent
+   * @return List containing only the one edge
+   */
   private Iterable<Edge<LongWritable, EdgePartitioningEdgeData>>
   getIterableEdge(Edge<LongWritable, EdgePartitioningEdgeData> edge) {
 
@@ -583,10 +630,22 @@ public class EdgePartitioningComputation extends
     return lst;
   }
 
-  private Long extractVertexId(Long edgeId) {
+  /**
+   * Edges have in their ID the id of their home vertex encode.
+   *
+   * @param edgeId the id of the edge for which you want the source vertexId
+   * @return the id of the source-vertex of the edge
+   */
+  private Long extractVertexId(long edgeId) {
     return edgeId % super.getTotalNumVertices();
   }
 
+  /**
+   * Finds a local edge with the given edge-id and returns it
+   *
+   * @param edgeId id of the edge
+   * @return edge from vertex.getEdges() or null if such an edge doesn't exist
+   */
   private Edge<LongWritable, EdgePartitioningEdgeData> getEdge(long edgeId) {
     for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
       super.vertex.getEdges()) {
@@ -658,10 +717,26 @@ public class EdgePartitioningComputation extends
    * exchanged with the partner edge.
    */
   public static class BestPartner implements Map.Entry<Long, Double> {
+    /**
+     * the id of the local edge
+     */
     private Long localEdgeId;
+    /**
+     * the id of the remote partner edge
+     */
     private Long partnerEdgeId;
+    /**
+     * the benefit from exchanging those IDs
+     */
     private Double benefit;
 
+    /**
+     * Default constructor to initialize all properties
+     *
+     * @param localEdgeId   the id of the local edge
+     * @param partnerEdgeId the id of the remote partner edge
+     * @param benefit       the benefit from exchanging those IDs
+     */
     public BestPartner(Long localEdgeId, Long partnerEdgeId, Double benefit) {
       this.localEdgeId = localEdgeId;
       this.partnerEdgeId = partnerEdgeId;
@@ -692,7 +767,8 @@ public class EdgePartitioningComputation extends
 
     @Override
     public Double setValue(Double value) {
-      return this.benefit = value;
+      this.benefit = value;
+      return this.benefit;
     }
   }
 }

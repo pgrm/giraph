@@ -26,10 +26,23 @@ import java.util.Set;
  *
  */
 public class EdgePartitioningVertexData extends VertexData {
+  /**
+   * An adjacency-matrix with a list of connected edgeIDs for each vertex
+   */
   private final Map<Long, Set<Long>> vertexConnections =
     new HashMap<Long, Set<Long>>();
+
+  /**
+   * The id of the edge chosen to do the color exchange
+   */
   private Long chosenEdgeId;
 
+  /**
+   * used for updating or inserting new values into {@code vertexConnection}
+   *
+   * @param vertexId the id of the vertex
+   * @param edgeId   the id of the edge connected to the vertex
+   */
   public void updateVertexConnections(long vertexId, long edgeId) {
     Set<Long> edgeSet = this.vertexConnections.get(vertexId);
 
@@ -40,12 +53,20 @@ public class EdgePartitioningVertexData extends VertexData {
     edgeSet.add(edgeId);
   }
 
+  /**
+   * Gets a list of edges connected to one vertex
+   *
+   * @param vertexId the id of the vertex to which the edges should be
+   *                 connected
+   * @return a list of edges connected to the specified vertex
+   */
   public Set<Long> getVertexConnections(long vertexId) {
     return this.vertexConnections.get(vertexId);
   }
 
   /**
-   * @param vertexId
+   * @param vertexId the id of the vertex for which the color ratio should be
+   *                 calculated
    * @return data for a histogram for the colors of all neighbors.
    * How often each of the colors is represented between the neighbors.
    * If a color isn't represented, it's not in the final Map.
@@ -68,7 +89,7 @@ public class EdgePartitioningVertexData extends VertexData {
    * not, create a new entry with the count 1, if yes than update the count +1
    *
    * @param color                 the color of one neighboring item
-   * @param neighboringColorRatio
+   * @param neighboringColorRatio the map to which the color should be added
    */
   private void addColorToNeighboringColoRatio(
     int color, Map<Integer, Integer> neighboringColorRatio) {

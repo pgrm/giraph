@@ -29,10 +29,14 @@ import java.util.Random;
 
 /**
  * Base class for graph partitioning by the JaBeJa-Algorithm
+ *
+ * @param <V> the Type of the vertex data
+ * @param <E> the Type of the edge data
+ * @param <M> the Type of the message data
  */
-public abstract class
-  GraphPartitioningComputation<V extends VertexData, E extends Writable,
-  M extends Writable> extends BasicComputation<LongWritable, V, E, M> {
+public abstract class GraphPartitioningComputation<V extends VertexData,
+  E extends Writable, M extends Writable> extends
+  BasicComputation<LongWritable, V, E, M> {
   /** logger */
   protected static final Logger LOG =
     Logger.getLogger(NodePartitioningComputation.class);
@@ -200,6 +204,9 @@ public abstract class
    */
   protected abstract void announceColorToNewNeighbors(Iterable<M> messages);
 
+  /**
+   * Announce the new colored degree but only if it has changed
+   */
   protected void announceColoredDegreesIfChanged() {
     if (this.vertex.getValue().getHaveColoredDegreesChanged()) {
       announceColoredDegrees();
@@ -207,6 +214,9 @@ public abstract class
     }
   }
 
+  /**
+   * Announce the new colored degree to all neighbors
+   */
   protected abstract void announceColoredDegrees();
 
   /**

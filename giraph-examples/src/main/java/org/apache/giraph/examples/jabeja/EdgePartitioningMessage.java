@@ -29,14 +29,22 @@ import java.util.List;
 import java.util.Map;
 
 /**
- *
+ * structure of messages sent between vertices, to communicate about nodes
  */
 public class EdgePartitioningMessage extends BaseMessage {
   /**
-   *
+   * id of the remote partner edge which shall switch the color
    */
   private long partnerEdgeId;
+
+  /**
+   * the value by which the local ratios would be improved
+   */
   private double improvedNeighboringColorsValue;
+
+  /**
+   * the color ratios of the edge in which name the message is sent
+   */
   private Map<Integer, Integer> neighboringColorRatio =
     new HashMap<Integer, Integer>();
 

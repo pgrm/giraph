@@ -103,6 +103,9 @@ public class EdgePartitioningEdgeData extends BaseWritable {
     return Integer.toString(this.edgeColor);
   }
 
+  /**
+   * @return the flag if the color has changed
+   */
   public boolean hasColorChanged() {
     return this.hasColorChanged;
   }
