@@ -200,11 +200,14 @@ public abstract class
    */
   protected abstract void announceColorToNewNeighbors(Iterable<M> messages);
 
-  /**
-   * Announces the different colored degrees, only if they have changed after
-   * they have been announced the last time.
-   */
-  protected abstract void announceColoredDegreesIfChanged();
+  protected void announceColoredDegreesIfChanged() {
+    if (this.vertex.getValue().getHaveColoredDegreesChanged()) {
+      announceColoredDegrees();
+      this.vertex.getValue().resetHaveColoredDegreesChanged();
+    }
+  }
+
+  protected abstract void announceColoredDegrees();
 
   /**
    * Updates the information about different colored degrees of its neighbors

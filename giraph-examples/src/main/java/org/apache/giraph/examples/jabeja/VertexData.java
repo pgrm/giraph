@@ -51,12 +51,6 @@ public class VertexData extends BaseWritable {
   private long chosenPartnerIdForExchange;
 
   /**
-   * The key is the color, the value is how often the color exists.
-   * this property is calculated
-   */
-  private Map<Integer, Integer> neighboringColorRatio;
-
-  /**
    * Flag which indicates, if the colored degrees have changed since it has
    * been reset the last time.
    */
@@ -66,19 +60,6 @@ public class VertexData extends BaseWritable {
    * Default constructor for reflection
    */
   public VertexData() {
-  }
-
-  /**
-   * @return data for a histogram for the colors of all neighbors.
-   * How often each of the colors is represented between the neighbors.
-   * If a color isn't represented, it's not in the final Map.
-   */
-  public Map<Integer, Integer> getNeighboringColorRatio() {
-    if (this.neighboringColorRatio == null) {
-      initializeNeighboringColorRatio();
-    }
-
-    return this.neighboringColorRatio;
   }
 
   /**
@@ -188,47 +169,12 @@ public class VertexData extends BaseWritable {
   }
 
   /**
-   * Check if the color already exists in the neighboringColorRatio-map. If
-   * not, create a new entry with the count 1, if yes than update the count +1
-   *
-   * @param color the color of one neighboring item
-   */
-  private void addColorToNeighboringColoRatio(int color) {
-    Integer numberOfColorAppearances = this.neighboringColorRatio.get(color);
-
-    if (numberOfColorAppearances == null) {
-      numberOfColorAppearances = 1;
-    } else {
-      numberOfColorAppearances++;
-    }
-
-    this.neighboringColorRatio.put(color, numberOfColorAppearances);
-  }
-
-  /**
    * Returns the number of neighbors
    *
    * @return the number of neighbors
    */
   public int getNumberOfNeighbors() {
     return this.neighborInformation.size();
-  }
-
-  /**
-   * Gets the number of neighbors in a specific color
-   *
-   * @param color color of the neighbors
-   * @return the number of neighbors in the color <code>color</code>
-   */
-  public int getNumberOfNeighbors(int color) {
-    Integer numberOfNeighborsInColor =
-      getNeighboringColorRatio().get(color);
-
-    if (numberOfNeighborsInColor == null) {
-      return 0;
-    } else {
-      return numberOfNeighborsInColor.intValue();
-    }
   }
 
   public long getChosenPartnerIdForExchange() {
@@ -251,20 +197,6 @@ public class VertexData extends BaseWritable {
     writeNeighboringColors(output, this.neighborInformation);
     writeNeighboringColors(output, this.randomNeighborInformation);
     output.writeLong(this.chosenPartnerIdForExchange);
-  }
-
-  /**
-   * Initializes the histogram for colors of all neighbors.
-   * How often each of the colors is represented between the neighbors.
-   * If a color isn't represented, it's not in the final Map.
-   */
-  private void initializeNeighboringColorRatio() {
-    this.neighboringColorRatio = new HashMap<Integer, Integer>();
-
-    for (Map.Entry<Long, NeighborInformation> item : this.neighborInformation
-      .entrySet()) {
-      addColorToNeighboringColoRatio(item.getValue().getColor());
-    }
   }
 
   /**

@@ -34,7 +34,7 @@ public class EdgePartitioningEdgeData extends BaseWritable {
   private long edgeId;
 
   /**
-   * The color of the current node
+   * The color of the current edge
    */
   private int edgeColor;
 
@@ -48,7 +48,17 @@ public class EdgePartitioningEdgeData extends BaseWritable {
    * Default constructor for reflection
    */
   public EdgePartitioningEdgeData() {
-    super();
+  }
+
+  /**
+   * Simple constructor to initialize all necessary properties
+   *
+   * @param edgeId    a unique id of the edge
+   * @param edgeColor the color of the current edge
+   */
+  public EdgePartitioningEdgeData(long edgeId, int edgeColor) {
+    this.edgeId = edgeId;
+    this.edgeColor = edgeColor;
   }
 
   public long getEdgeId() {
@@ -67,7 +77,7 @@ public class EdgePartitioningEdgeData extends BaseWritable {
    * Sets the new node color and checks if it has changed,
    * in that case it also sets the flag {@code hasColorChanged}
    *
-   * @param edgeColor the new color of the current vertex
+   * @param edgeColor the new color of the current edge
    */
   public void setEdgeColor(int edgeColor) {
     if (this.edgeColor != edgeColor) {

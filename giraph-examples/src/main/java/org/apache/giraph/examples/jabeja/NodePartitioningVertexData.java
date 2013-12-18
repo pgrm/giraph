@@ -20,6 +20,8 @@ package org.apache.giraph.examples.jabeja;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Vertex data for the NodePartitioning solution.
@@ -35,6 +37,11 @@ public class NodePartitioningVertexData extends VertexData {
    * the last time
    */
   private boolean hasColorChanged;
+  /**
+   * The key is the color, the value is how often the color exists.
+   * this property is calculated
+   */
+  private Map<Integer, Integer> neighboringColorRatio;
 
   /**
    * Default constructor for reflection
@@ -80,7 +87,7 @@ public class NodePartitioningVertexData extends VertexData {
    * node.
    */
   public int getNumberOfNeighborsWithCurrentColor() {
-    return super.getNumberOfNeighbors(getNodeColor());
+    return getNumberOfNeighbors(getNodeColor());
   }
 
   @Override
@@ -111,5 +118,68 @@ public class NodePartitioningVertexData extends VertexData {
    */
   public void resetHasColorChanged() {
     this.hasColorChanged = false;
+  }
+
+  /**
+   * @return data for a histogram for the colors of all neighbors.
+   * How often each of the colors is represented between the neighbors.
+   * If a color isn't represented, it's not in the final Map.
+   */
+  public Map<Integer, Integer> getNeighboringColorRatio() {
+    if (this.neighboringColorRatio == null) {
+      initializeNeighboringColorRatio();
+    }
+
+    return this.neighboringColorRatio;
+  }
+
+  /**
+   * Check if the color already exists in the neighboringColorRatio-map. If
+   * not, create a new entry with the count 1, if yes than update the count +1
+   *
+   * @param color the color of one neighboring item
+   */
+  private void addColorToNeighboringColoRatio(int color) {
+    Integer numberOfColorAppearances = this.neighboringColorRatio.get(color);
+
+    if (numberOfColorAppearances == null) {
+      numberOfColorAppearances = 1;
+    } else {
+      numberOfColorAppearances++;
+    }
+
+    this.neighboringColorRatio.put(color, numberOfColorAppearances);
+  }
+
+  /**
+   * Gets the number of neighbors in a specific color
+   *
+   * @param color color of the neighbors
+   * @return the number of neighbors in the color <code>color</code>
+   */
+  public int getNumberOfNeighbors(int color) {
+    Integer numberOfNeighborsInColor =
+      getNeighboringColorRatio().get(color);
+
+    if (numberOfNeighborsInColor == null) {
+      return 0;
+    } else {
+      return numberOfNeighborsInColor.intValue();
+    }
+  }
+
+  /**
+   * Initializes the histogram for colors of all neighbors.
+   * How often each of the colors is represented between the neighbors.
+   * If a color isn't represented, it's not in the final Map.
+   */
+  private void initializeNeighboringColorRatio() {
+    this.neighboringColorRatio = new HashMap<Integer, Integer>();
+
+    for (Map.Entry<Long, NeighborInformation> item :
+      super.getNeighborInformation().entrySet()) {
+
+      addColorToNeighboringColoRatio(item.getValue().getColor());
+    }
   }
 }

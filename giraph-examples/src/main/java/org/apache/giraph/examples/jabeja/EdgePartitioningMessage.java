@@ -24,12 +24,17 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  *
  */
 public class EdgePartitioningMessage extends BaseMessage {
+  private Map<Integer, Integer> neighboringColorRatio =
+    new HashMap<Integer, Integer>();
+
   private List<Edge<LongWritable, EdgePartitioningEdgeData>> connectedEdges =
     new ArrayList<Edge<LongWritable, EdgePartitioningEdgeData>>();
 
@@ -44,6 +49,33 @@ public class EdgePartitioningMessage extends BaseMessage {
     }
   }
 
+  /**
+   * Initialize the message for sending neighboring color ratios
+   *
+   * @param sourceId              the id of the vertex sending the message
+   * @param neighboringColorRatio the neighboring color ratio of the vertex
+   *                              sending this message
+   * @param isRandomNeighbor      flag if it is a regular neighbor or one
+   *                              from the random overlay
+   */
+  public EdgePartitioningMessage(
+    long sourceId, Map<Integer, Integer> neighboringColorRatio,
+    boolean isRandomNeighbor) {
+    super(sourceId, isRandomNeighbor, Type.DegreeUpdate);
+
+    this.neighboringColorRatio = neighboringColorRatio;
+  }
+
+  public List<Edge<LongWritable, EdgePartitioningEdgeData>>
+  getConnectedEdges() {
+    return connectedEdges;
+  }
+
+  public void setConnectedEdges(
+    List<Edge<LongWritable, EdgePartitioningEdgeData>> connectedEdges) {
+    this.connectedEdges = connectedEdges;
+  }
+
   @Override
   public void write(DataOutput dataOutput) throws IOException {
     super.write(dataOutput);
@@ -51,6 +83,9 @@ public class EdgePartitioningMessage extends BaseMessage {
     switch (super.getMessageType()) {
     case ColorUpdate:
       writeEdges(dataOutput);
+      break;
+    case DegreeUpdate:
+      writeNeighboringColorRatio(dataOutput);
       break;
     default:
     }
@@ -63,6 +98,9 @@ public class EdgePartitioningMessage extends BaseMessage {
     switch (super.getMessageType()) {
     case ColorUpdate:
       readEdges(dataInput);
+      break;
+    case DegreeUpdate:
+      readNeighboringColorRatio(dataInput);
       break;
     default:
     }
@@ -106,5 +144,38 @@ public class EdgePartitioningMessage extends BaseMessage {
           return edge;
         }
       });
+  }
+
+  /**
+   * read the neighboring color ratio map from the dataInput
+   *
+   * @param dataInput the input from {@code readFields}
+   * @throws IOException the forwarded IOException from
+   *                     {@code dataInput.readX()}
+   */
+  private void readNeighboringColorRatio(DataInput dataInput)
+    throws IOException {
+
+    super.readMap(dataInput, neighboringColorRatio, super.INTEGER_VALUE_READER,
+      super.INTEGER_VALUE_READER);
+  }
+
+  /**
+   * write the neighboring color ratio map to the dataOutput
+   *
+   * @param dataOutput the output from {@code write}
+   * @throws IOException the forwarded IOException from
+   *                     {@code dataOutput.writeX()}
+   */
+  private void writeNeighboringColorRatio(DataOutput dataOutput)
+    throws IOException {
+
+    super
+      .writeMap(dataOutput, neighboringColorRatio, super.INTEGER_VALUE_WRITER,
+        super.INTEGER_VALUE_WRITER);
+  }
+
+  public Map<Integer, Integer> getNeighboringColorRatio() {
+    return neighboringColorRatio;
   }
 }
