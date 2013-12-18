@@ -56,6 +56,12 @@ public class EdgePartitioningMessage extends BaseMessage {
     new ArrayList<Edge<LongWritable, EdgePartitioningEdgeData>>();
 
   /**
+   * Default constructor for reflection
+   */
+  public EdgePartitioningMessage() {
+  }
+
+  /**
    * Constructor to send an update of the edges to neighbors
    *
    * @param sourceId         the id of the vertex sending the message
