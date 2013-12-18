@@ -78,6 +78,9 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
       this.conf = new JaBeJaConfigurations(getConf());
     }
     this.vertex = vertex;
+    if (this.vertex.getValue() == null) {
+      this.vertex.setValue(initializeEmptyVertexData());
+    }
 
     if (isTimeToStop()) {
       this.vertex.voteToHalt();
@@ -102,6 +105,8 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
       runJaBeJaAlgorithm(mode, messages);
     }
   }
+
+  protected abstract V initializeEmptyVertexData();
 
   /**
    * This function is used in the first stage, when the graph is being

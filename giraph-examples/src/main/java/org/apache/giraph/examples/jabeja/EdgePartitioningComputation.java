@@ -55,6 +55,11 @@ public class EdgePartitioningComputation extends
   }
 
   @Override
+  protected EdgePartitioningVertexData initializeEmptyVertexData() {
+    return new EdgePartitioningVertexData();
+  }
+
+  @Override
   protected void initializeColor() {
     EdgePartitioningVertexData vertexData = super.vertex.getValue();
     int numberOfColors = super.conf.getNumberOfColors();
