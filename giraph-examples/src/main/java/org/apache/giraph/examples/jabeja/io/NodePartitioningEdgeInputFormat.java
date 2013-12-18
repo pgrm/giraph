@@ -54,7 +54,7 @@ public class NodePartitioningEdgeInputFormat extends
 
     @Override
     protected LongWritable getTargetVertexId(Text line) throws IOException {
-      long sourceId = Long.parseLong(line.toString().split("\t")[0]);
+      long sourceId = Long.parseLong(line.toString().split("\t")[1]);
       return new LongWritable(sourceId);
     }
 
