@@ -32,6 +32,8 @@ import java.util.Map;
  *
  */
 public class EdgePartitioningMessage extends BaseMessage {
+  private long partnerEdgeId;
+  private double improvedNeighboringColorsValue;
   private Map<Integer, Integer> neighboringColorRatio =
     new HashMap<Integer, Integer>();
 
@@ -66,6 +68,22 @@ public class EdgePartitioningMessage extends BaseMessage {
     this.neighboringColorRatio = neighboringColorRatio;
   }
 
+  public EdgePartitioningMessage(
+    long localEdgeId, long partnerEdgeId,
+    double improvedNeighboringColorsValue, boolean isRandomNeighbor) {
+    super(localEdgeId, isRandomNeighbor, Type.ColorExchangeInitialization);
+
+    this.partnerEdgeId = partnerEdgeId;
+    this.improvedNeighboringColorsValue = improvedNeighboringColorsValue;
+  }
+
+  public EdgePartitioningMessage(
+    long localEdgeId, long partnerEdgeId, boolean isRandomNeighbor) {
+    super(localEdgeId, isRandomNeighbor, Type.ConfirmColorExchange);
+
+    this.partnerEdgeId = partnerEdgeId;
+  }
+
   public List<Edge<LongWritable, EdgePartitioningEdgeData>>
   getConnectedEdges() {
     return connectedEdges;
@@ -87,6 +105,10 @@ public class EdgePartitioningMessage extends BaseMessage {
     case DegreeUpdate:
       writeNeighboringColorRatio(dataOutput);
       break;
+    case ColorExchangeInitialization:
+      dataOutput.writeLong(this.partnerEdgeId);
+      dataOutput.writeDouble(this.improvedNeighboringColorsValue);
+      break;
     default:
     }
   }
@@ -101,6 +123,10 @@ public class EdgePartitioningMessage extends BaseMessage {
       break;
     case DegreeUpdate:
       readNeighboringColorRatio(dataInput);
+      break;
+    case ColorExchangeInitialization:
+      this.partnerEdgeId = dataInput.readLong();
+      this.improvedNeighboringColorsValue = dataInput.readDouble();
       break;
     default:
     }
@@ -177,5 +203,13 @@ public class EdgePartitioningMessage extends BaseMessage {
 
   public Map<Integer, Integer> getNeighboringColorRatio() {
     return neighboringColorRatio;
+  }
+
+  public double getImprovedNeighboringColorsValue() {
+    return improvedNeighboringColorsValue;
+  }
+
+  public long getPartnerEdgeId() {
+    return partnerEdgeId;
   }
 }

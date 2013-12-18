@@ -24,7 +24,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
 import java.io.IOException;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -177,7 +176,7 @@ public class EdgePartitioningComputation extends
   protected Map.Entry<Long, Double> findPartner() {
     EdgePartitioningVertexData data = super.vertex.getValue();
 
-    Map.Entry<Long, Double> firstPartner =
+    BestPartner firstPartner =
       findPartner(data.getNeighborInformation());
     Map.Entry<Long, Double> randomPartner =
       findPartner(data.getRandomNeighborInformation());
@@ -194,15 +193,137 @@ public class EdgePartitioningComputation extends
   }
 
   @Override
-  protected void initiateColoExchangeHandshake(
+  protected void initiateColorExchangeHandshake(
     Map.Entry<Long, Double> partner, boolean isRandomNeighbor) {
 
+    BestPartner myPartner = (BestPartner) partner;
+    EdgePartitioningVertexData vertexData = super.vertex.getValue();
+    long vertexId = extractVertexId(partner.getKey());
+
+    // my edges want to exchange between each other
+    if (vertexId == super.vertex.getId().get()) {
+      vertexData.setChosenPartnerIdForExchange(-1);
+      int localColor = vertexData.getNeighborInformation().get(
+        myPartner.getLocalEdgeId()).getColor();
+      int partnerColor = vertexData.getNeighborInformation().get(
+        myPartner.getPartnerEdgeId()).getColor();
+
+      vertexData.getNeighborInformation().get(myPartner.getLocalEdgeId()).
+        setColor(partnerColor);
+      vertexData.getNeighborInformation().get(myPartner.getPartnerEdgeId()).
+        setColor(localColor);
+
+      getEdge(myPartner.getLocalEdgeId()).getValue().setEdgeColor(partnerColor);
+      getEdge(myPartner.getPartnerEdgeId()).getValue().setEdgeColor(localColor);
+    } else {
+      vertexData.setChosenEdgeId(myPartner.getLocalEdgeId());
+
+      super.sendMessage(new LongWritable(vertexId),
+        new EdgePartitioningMessage(myPartner.getLocalEdgeId(),
+          myPartner.getPartnerEdgeId(), partner.getValue(), isRandomNeighbor));
+    }
   }
 
   @Override
   protected void continueColorExchange(
     int mode, Iterable<EdgePartitioningMessage> messages) {
+    EdgePartitioningVertexData vertexData = super.vertex.getValue();
+    long preferredPartner = vertexData.getChosenPartnerIdForExchange();
 
+    switch (mode) {
+    case 0:
+      if (preferredPartner > -1) {
+        EdgePartitioningMessage partnerId =
+          getBestOfferedPartnerIdForExchange(messages);
+
+        LOG.trace(
+          super.vertex.getId().get() + ": best offer from " + partnerId);
+        if (partnerId != null) {
+          long desiredPartnerId = vertexData.getChosenPartnerIdForExchange();
+
+          if (partnerId == desiredPartnerId) {
+            LOG.trace("Direct match - let's exchange");
+            exchangeColors(partnerId);
+            vertexData.setChosenPartnerIdForExchange(-1); // reset partner
+          } else {
+            LOG.trace("Send confirmation");
+            confirmColorExchangeWithPartner(partnerId);
+          }
+        }
+      }
+      break;
+    case 1:
+      if (preferredPartner > -1) {
+        // has previously preferred partner answered?
+        if (messages.iterator().hasNext()) {
+          // switch the vertex id with a 50:50 chance
+          if (getRandomNumber(2) == 1) {
+            preferredPartner = messages.iterator().next().getSourceId();
+          }
+        }
+        LOG.trace(super.vertex.getId().get() +
+                  ": second confirmation to " + preferredPartner);
+        confirmColorExchangeWithPartner(preferredPartner);
+      }
+      break;
+    case 2:
+      Long finalPartnerId = getBestOfferedPartnerIdForExchange(messages);
+
+      LOG.trace(super.vertex.getId().get() +
+                ": got a final reply from " + finalPartnerId);
+      if (finalPartnerId != null &&
+          finalPartnerId == vertexData.getChosenPartnerIdForExchange()) {
+        LOG.trace("It fits - let's exchange");
+        exchangeColors(finalPartnerId);
+      }
+      announceColorIfChanged();
+      break;
+    default:
+    }
+  }
+
+  /**
+   * Once an agreement was met, it is safe to assume that both node know
+   * about this agreement, both nodes also know about each others color
+   * wherefore we don't need to send anything but simply only set the color
+   * of the current node to that of the partner
+   *
+   * @param partnerId the id of the color exchanging partner
+   */
+  private void exchangeColors(long partnerId) {
+    EdgePartitioningVertexData vertexData = super.vertex.getValue();
+    int newColor;
+
+    if (vertexData.isRandomNeighbor(partnerId)) {
+      newColor =
+        vertexData.getRandomNeighborInformation().get(partnerId).getColor();
+    } else {
+      newColor = vertexData.getNeighborInformation().get(partnerId).getColor();
+    }
+
+    vertexData.getNeighborInformation().get(vertexData.getChosenEdgeId()).
+      setColor(newColor);
+    getEdge(vertexData.getChosenEdgeId()).getValue().setEdgeColor(newColor);
+  }
+
+  /**
+   * Send a confirmation to the partner and set it as the new preferred partner
+   *
+   * @param partnerId the id of the vertex with whom the exchange is planned
+   */
+  private void confirmColorExchangeWithPartner(
+    EdgePartitioningMessage message) {
+
+    long vertexId = extractVertexId(message.getSourceId());
+
+    super.sendMessage(new LongWritable(vertexId),
+      new EdgePartitioningMessage(
+        message.getPartnerEdgeId(), message.getSourceId(),
+        super.vertex.getValue().isRandomNeighbor(message.getSourceId())));
+
+    super.vertex.getValue()
+      .setChosenPartnerIdForExchange(message.getSourceId());
+    super.vertex.getValue().setChosenEdgeId(message.getPartnerEdgeId());
   }
 
   /**
@@ -214,10 +335,11 @@ public class EdgePartitioningComputation extends
    * @return the vertex ID of the partner with whom the colors will be
    * exchanged
    */
-  private Map.Entry<Long, Double> findPartner(
+  private BestPartner findPartner(
     Map<Long, VertexData.NeighborInformation> neighbors) {
 
     double highest = 0;
+    Long bestEdgeSource = null;
     Long bestPartner = null;
 
     for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
@@ -248,12 +370,43 @@ public class EdgePartitioningComputation extends
 
         if (isNewColorBetterThanOld(newSum, sum) && newSum > highest) {
           bestPartner = neighbor.getKey();
+          bestEdgeSource = edgeData.getEdgeId();
           highest = newSum;
         }
       }
     }
 
-    return new AbstractMap.SimpleEntry<Long, Double>(bestPartner, highest);
+    return new BestPartner(bestEdgeSource, bestPartner, highest);
+  }
+
+  /**
+   * Selects the partner id from incoming offers (messages) so that it is
+   * either the desired one (best choice) or otherwise the one with the
+   * highest value. If the desired partner is found, it means the other node
+   * found it as well, and there is no need for additional confirmations
+   * anymore.
+   *
+   * @param messages incoming exchange offers
+   * @return the best offer from the incoming messages
+   */
+  private Long getBestOfferedPartnerIdForExchange(
+    Iterable<EdgePartitioningMessage> messages) {
+    long desiredPartnerId =
+      super.vertex.getValue().getChosenPartnerIdForExchange();
+    Long partnerId = null;
+    double bestValue = 0;
+
+    for (EdgePartitioningMessage message : messages) {
+      if (message.getSourceId() == desiredPartnerId) {
+        partnerId = message.getSourceId();
+        break;
+      } else if (message.getImprovedNeighboringColorsValue() > bestValue) {
+        partnerId = message.getSourceId();
+        bestValue = message.getImprovedNeighboringColorsValue();
+      }
+    }
+
+    return partnerId;
   }
 
   private Map<Integer, Integer> getNeighboringColorRatio(
@@ -428,6 +581,50 @@ public class EdgePartitioningComputation extends
 
     public void setValue(E value) {
       this.value = value;
+    }
+  }
+
+  /**
+   * Map.Entry isn't enough anymore for Edge-Partitioning,
+   * since it also needs to store the information, which edge should be
+   * exchanged with the partner edge.
+   */
+  public static class BestPartner implements Map.Entry<Long, Double> {
+    private Long localEdgeId;
+    private Long partnerEdgeId;
+    private Double benefit;
+
+    public BestPartner(Long localEdgeId, Long partnerEdgeId, Double benefit) {
+      this.localEdgeId = localEdgeId;
+      this.partnerEdgeId = partnerEdgeId;
+      this.benefit = benefit;
+    }
+
+    public Long getLocalEdgeId() {
+      return localEdgeId;
+    }
+
+    public Long getPartnerEdgeId() {
+      return partnerEdgeId;
+    }
+
+    public Double getBenefit() {
+      return benefit;
+    }
+
+    @Override
+    public Long getKey() {
+      return this.partnerEdgeId;
+    }
+
+    @Override
+    public Double getValue() {
+      return this.benefit;
+    }
+
+    @Override
+    public Double setValue(Double value) {
+      return this.benefit = value;
     }
   }
 }

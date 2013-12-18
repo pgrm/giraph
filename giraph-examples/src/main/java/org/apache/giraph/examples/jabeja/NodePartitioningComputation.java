@@ -191,7 +191,7 @@ public class NodePartitioningComputation extends
   }
 
   @Override
-  protected void initiateColoExchangeHandshake(
+  protected void initiateColorExchangeHandshake(
     Map.Entry<Long, Double> partner, boolean isRandomNeighbor) {
 
     super.sendMessage(new LongWritable(partner.getKey()),

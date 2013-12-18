@@ -28,6 +28,7 @@ import java.util.Set;
 public class EdgePartitioningVertexData extends VertexData {
   private final Map<Long, Set<Long>> vertexConnections =
     new HashMap<Long, Set<Long>>();
+  private Long chosenEdgeId;
 
   public void updateVertexConnections(long vertexId, long edgeId) {
     Set<Long> edgeSet = this.vertexConnections.get(vertexId);
@@ -80,6 +81,14 @@ public class EdgePartitioningVertexData extends VertexData {
     }
 
     neighboringColorRatio.put(color, numberOfColorAppearances);
+  }
+
+  public void setChosenEdgeId(Long chosenEdgeId) {
+    this.chosenEdgeId = chosenEdgeId;
+  }
+
+  public Long getChosenEdgeId() {
+    return chosenEdgeId;
   }
 }
 

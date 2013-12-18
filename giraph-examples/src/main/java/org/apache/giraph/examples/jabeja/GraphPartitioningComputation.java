@@ -144,7 +144,7 @@ public abstract class
         this.vertex.getValue().setChosenPartnerIdForExchange(partner.getKey());
         LOG.trace(this.vertex.getId().get() +
                   ": Initialize Color-Exchange with " + partner.getKey());
-        initiateColoExchangeHandshake(partner,
+        initiateColorExchangeHandshake(partner,
           this.vertex.getValue().isRandomNeighbor(partner.getKey()));
       } else {
         this.vertex.getValue().setChosenPartnerIdForExchange(-1);
@@ -237,7 +237,7 @@ public abstract class
    *                         random overlay
    */
 
-  protected abstract void initiateColoExchangeHandshake(
+  protected abstract void initiateColorExchangeHandshake(
     Map.Entry<Long, Double> partner, boolean isRandomNeighbor);
 
   /**
