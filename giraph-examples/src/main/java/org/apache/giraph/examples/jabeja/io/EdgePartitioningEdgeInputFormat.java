@@ -17,10 +17,10 @@
  */
 package org.apache.giraph.examples.jabeja.io;
 
+import org.apache.giraph.examples.jabeja.EdgePartitioningVertexData;
 import org.apache.giraph.io.EdgeReader;
 import org.apache.giraph.io.formats.TextEdgeInputFormat;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -31,10 +31,10 @@ import java.io.IOException;
  * A simple InputFormat VertexA \t VertexB to parse real data from social
  * networks
  */
-public class NodePartitioningEdgeInputFormat extends
-  TextEdgeInputFormat<LongWritable, NullWritable> {
+public class EdgePartitioningEdgeInputFormat extends
+  TextEdgeInputFormat<LongWritable, EdgePartitioningVertexData> {
   @Override
-  public EdgeReader<LongWritable, NullWritable> createEdgeReader(
+  public EdgeReader<LongWritable, EdgePartitioningVertexData> createEdgeReader(
     InputSplit split, TaskAttemptContext context) throws IOException {
     return new NodePartitioningEdgeReader();
   }
@@ -59,8 +59,10 @@ public class NodePartitioningEdgeInputFormat extends
     }
 
     @Override
-    protected NullWritable getValue(Text line) throws IOException {
-      return NullWritable.get();
+    protected EdgePartitioningVertexData getValue(Text line)
+      throws IOException {
+
+      return new EdgePartitioningVertexData();
     }
   }
 }

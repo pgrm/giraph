@@ -17,22 +17,23 @@
  */
 package org.apache.giraph.examples.jabeja.io;
 
-import org.apache.giraph.examples.jabeja.NodePartitioningVertexData;
-import org.apache.hadoop.io.NullWritable;
+import org.apache.giraph.examples.jabeja.EdgePartitioningEdgeData;
+import org.apache.giraph.examples.jabeja.EdgePartitioningVertexData;
 
 /**
  * Random graph generator for the NodePartitioning problem.
  */
-public class NodePartitioningPseudoRandomVertexInputFormat extends
-  PseudoRandomVertexInputFormat<NodePartitioningVertexData, NullWritable> {
+public class EdgePartitioningPseudoRandomVertexInputFormat extends
+  PseudoRandomVertexInputFormat<EdgePartitioningVertexData,
+    EdgePartitioningEdgeData> {
   @Override
-  protected NodePartitioningVertexData getVertexValue(long vertexId) {
-    return new NodePartitioningVertexData();
+  protected EdgePartitioningVertexData getVertexValue(long vertexId) {
+    return new EdgePartitioningVertexData();
   }
 
   @Override
-  protected NullWritable getEdgeValue(
+  protected EdgePartitioningEdgeData getEdgeValue(
     long vertexSourceId, long vertexDestinationId) {
-    return NullWritable.get();
+    return new EdgePartitioningEdgeData();
   }
 }

@@ -106,6 +106,12 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
     }
   }
 
+  /**
+   * In case no vertex data has been provided during the initialization,
+   * it will be created here
+   *
+   * @return a new VertexData-object
+   */
   protected abstract V initializeEmptyVertexData();
 
   /**

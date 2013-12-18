@@ -17,22 +17,23 @@
  */
 package org.apache.giraph.examples.jabeja.io;
 
-import org.apache.giraph.examples.jabeja.NodePartitioningVertexData;
+import org.apache.giraph.examples.jabeja.EdgePartitioningEdgeData;
+import org.apache.giraph.examples.jabeja.EdgePartitioningVertexData;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * A simple output format for vertices for the Node-Partitioning Problem
  */
-public class NodePartitioningVertexOutputFormat extends
-  TextVertexOutputFormat<LongWritable, NodePartitioningVertexData,
-    NullWritable> {
+public class EdgePartitioningVertexOutputFormat extends
+  TextVertexOutputFormat<LongWritable, EdgePartitioningVertexData,
+    EdgePartitioningEdgeData> {
   @Override
   public TextVertexWriter createVertexWriter(
     TaskAttemptContext context) throws IOException, InterruptedException {
@@ -48,16 +49,22 @@ public class NodePartitioningVertexOutputFormat extends
 
     @Override
     protected Text convertVertexToLine(
-      Vertex<LongWritable, NodePartitioningVertexData,
-        NullWritable> vertex) throws IOException {
+      Vertex<LongWritable, EdgePartitioningVertexData,
+        EdgePartitioningEdgeData> vertex) throws IOException {
       StringBuilder sb = new StringBuilder();
-      NodePartitioningVertexData value = vertex.getValue();
+      EdgePartitioningVertexData value = vertex.getValue();
+      Map<Integer, Integer> neighboringColorRatio =
+        value.getNeighboringColorRatio(vertex.getId().get());
 
       sb.append(vertex.getId());
       sb.append(":\t");
-      sb.append(value.getNodeColor());
-      sb.append("; ");
-      sb.append(value.getNodeEnergy());
+      sb.append(neighboringColorRatio.size());
+      sb.append(" - (");
+
+      for (Integer color : neighboringColorRatio.keySet()) {
+        sb.append(color);
+        sb.append(", ");
+      }
       sb.append("\t[");
 
       for (Long l : value.getNeighbors()) {
