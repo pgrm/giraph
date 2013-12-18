@@ -79,6 +79,10 @@ public class NodePartitioningComputation extends
     // recreated for every step and vertex
     this.randomGenerator = null;
 
+    if (vertex.getValue() == null) {
+      vertex.setValue(new NodePartitioningVertexData());
+    }
+
     if (this.conf == null) {
       this.conf = new JaBeJaConfigurations(super.getConf());
     }
