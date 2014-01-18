@@ -22,7 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- *
+ * Struct for data for each edge in edge-partitioning
  */
 public class EdgePartitioningEdgeData extends BaseWritable {
   /**
@@ -90,12 +90,14 @@ public class EdgePartitioningEdgeData extends BaseWritable {
   public void readFields(DataInput input) throws IOException {
     this.edgeId = input.readLong();
     this.edgeColor = input.readInt();
+    this.hasColorChanged = input.readBoolean();
   }
 
   @Override
   public void write(DataOutput output) throws IOException {
     output.writeLong(this.edgeId);
     output.writeInt(this.edgeColor);
+    output.writeBoolean(this.hasColorChanged);
   }
 
   @Override

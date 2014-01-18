@@ -76,7 +76,7 @@ public class EdgePartitioningMessage extends BaseMessage {
     super(sourceId, isRandomNeighbor, Type.ColorUpdate);
 
     for (Edge<LongWritable, EdgePartitioningEdgeData> edge : edges) {
-      connectedEdges.add(edge);
+      connectedEdges.add(clone(edge));
     }
   }
 
@@ -260,6 +260,21 @@ public class EdgePartitioningMessage extends BaseMessage {
     super
       .writeMap(dataOutput, neighboringColorRatio, super.INTEGER_VALUE_WRITER,
         super.INTEGER_VALUE_WRITER);
+  }
+
+  /**
+   * creates a clone of the edges sent, so that the won't screw up giraph
+   *
+   * @param edge edge to be cloned
+   * @return a cloned edge with the target vertexId and edge data
+   */
+  private Edge<LongWritable, EdgePartitioningEdgeData> clone(
+    Edge<LongWritable, EdgePartitioningEdgeData> edge) {
+
+    return new EdgePartitioningComputation.SimpleEdge<LongWritable,
+      EdgePartitioningEdgeData>(edge.getTargetVertexId(),
+      new EdgePartitioningEdgeData(edge.getValue().getEdgeId(),
+        edge.getValue().getEdgeColor()));
   }
 
   public Map<Integer, Integer> getNeighboringColorRatio() {

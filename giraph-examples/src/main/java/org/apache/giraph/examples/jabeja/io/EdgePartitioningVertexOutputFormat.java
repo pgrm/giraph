@@ -17,6 +17,7 @@
  */
 package org.apache.giraph.examples.jabeja.io;
 
+import org.apache.giraph.edge.Edge;
 import org.apache.giraph.examples.jabeja.EdgePartitioningEdgeData;
 import org.apache.giraph.examples.jabeja.EdgePartitioningVertexData;
 import org.apache.giraph.graph.Vertex;
@@ -67,8 +68,20 @@ public class EdgePartitioningVertexOutputFormat extends
       }
       sb.append("\t[");
 
-      for (Long l : value.getNeighbors()) {
+      for (Long l : value.getVertexConnections(vertex.getId().get())) {
         sb.append(l);
+        sb.append(", ");
+      }
+      sb.append("]\t[");
+
+      for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
+        vertex.getEdges()) {
+
+        sb.append(edge.getValue().getEdgeId());
+        sb.append("(");
+        sb.append(edge.getValue().getEdgeColor());
+        sb.append(")->");
+        sb.append(edge.getTargetVertexId());
         sb.append(", ");
       }
       sb.append("]");

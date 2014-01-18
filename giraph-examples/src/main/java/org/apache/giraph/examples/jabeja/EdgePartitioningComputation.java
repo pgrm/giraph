@@ -72,8 +72,11 @@ public class EdgePartitioningComputation extends
 
       edgeId = index * super.getTotalNumVertices() + super.vertex.getId().get();
       edgeColor = (int) getRandomNumber(numberOfColors);
-      edge.getValue().setEdgeId(edgeId);
-      edge.getValue().setEdgeColor(edgeColor);
+
+      EdgePartitioningEdgeData edgeValue = edge.getValue();
+      edgeValue.setEdgeId(edgeId);
+      edgeValue.setEdgeColor(edgeColor);
+      super.vertex.setEdgeValue(edge.getTargetVertexId(), edgeValue);
 
       vertexData.setNeighborWithColor(edgeId, edgeColor, false);
       vertexData.updateVertexConnections(
@@ -82,8 +85,8 @@ public class EdgePartitioningComputation extends
 
       index++;
 
-      LOG.trace("Chose color " + edgeColor + " out of " + numberOfColors +
-                " colors and ID " + edgeId);
+      LOG.info("Chose color " + edgeColor + " out of " + numberOfColors +
+               " colors and ID " + edgeId);
     }
   }
 
@@ -219,8 +222,8 @@ public class EdgePartitioningComputation extends
       vertexData.getNeighborInformation().get(myPartner.getPartnerEdgeId()).
         setColor(localColor);
 
-      getEdge(myPartner.getLocalEdgeId()).getValue().setEdgeColor(partnerColor);
-      getEdge(myPartner.getPartnerEdgeId()).getValue().setEdgeColor(localColor);
+      updateEdgeColor(getEdge(myPartner.getLocalEdgeId()), partnerColor);
+      updateEdgeColor(getEdge(myPartner.getPartnerEdgeId()), localColor);
     } else {
       vertexData.setChosenEdgeId(myPartner.getLocalEdgeId());
 
@@ -242,17 +245,17 @@ public class EdgePartitioningComputation extends
         EdgePartitioningMessage partner =
           getBestOfferedPartnerForExchange(messages);
 
-        LOG.trace(
+        LOG.info(
           super.vertex.getId().get() + ": best offer from " + partner);
         if (partner != null) {
           long desiredPartnerId = vertexData.getChosenPartnerIdForExchange();
 
           if (partner.getSourceId() == desiredPartnerId) {
-            LOG.trace("Direct match - let's exchange");
+            LOG.info("Direct match - let's exchange");
             exchangeColors(partner.getSourceId());
             vertexData.setChosenPartnerIdForExchange(-1); // reset partner
           } else {
-            LOG.trace("Send confirmation");
+            LOG.info("Send confirmation");
             confirmColorExchangeWithPartner(partner);
           }
         }
@@ -269,8 +272,8 @@ public class EdgePartitioningComputation extends
             preferredPartner = newPartner.getSourceId();
           }
         }
-        LOG.trace(super.vertex.getId().get() +
-                  ": second confirmation to " + preferredPartner);
+        LOG.info(super.vertex.getId().get() +
+                 ": second confirmation to " + preferredPartner);
 
         if (newPartner == null) {
           confirmColorExchangeWithPartner();
@@ -284,12 +287,12 @@ public class EdgePartitioningComputation extends
         EdgePartitioningMessage finalPartner =
           getBestOfferedPartnerForExchange(messages);
 
-        LOG.trace(super.vertex.getId().get() +
-                  ": got a final reply from " + finalPartner);
+        LOG.info(super.vertex.getId().get() +
+                 ": got a final reply from " + finalPartner);
         if (finalPartner != null &&
             finalPartner.getSourceId() ==
             vertexData.getChosenPartnerIdForExchange()) {
-          LOG.trace("It fits - let's exchange");
+          LOG.info("It fits - let's exchange");
           exchangeColors(finalPartner.getSourceId());
         }
       }
@@ -320,7 +323,7 @@ public class EdgePartitioningComputation extends
 
     vertexData.getNeighborInformation().get(vertexData.getChosenEdgeId()).
       setColor(newColor);
-    getEdge(vertexData.getChosenEdgeId()).getValue().setEdgeColor(newColor);
+    updateEdgeColor(getEdge(vertexData.getChosenEdgeId()), newColor);
   }
 
   /**
@@ -646,6 +649,22 @@ public class EdgePartitioningComputation extends
   }
 
   /**
+   * updates the color of the edge, this doesn't work automatically,
+   * the new edgeValue has to be set on the vertex
+   *
+   * @param edge     the edge which has to be updated
+   * @param newColor the new color of this edge
+   */
+  private void updateEdgeColor(
+    Edge<LongWritable, EdgePartitioningEdgeData> edge, int newColor) {
+
+    EdgePartitioningEdgeData edgeValue = edge.getValue();
+    edgeValue.setEdgeColor(newColor);
+
+    super.vertex.setEdgeValue(edge.getTargetVertexId(), edgeValue);
+  }
+
+  /**
    * Finds a local edge with the given edge-id and returns it
    *
    * @param edgeId id of the edge
@@ -655,12 +674,18 @@ public class EdgePartitioningComputation extends
     for (Edge<LongWritable, EdgePartitioningEdgeData> edge :
       super.vertex.getEdges()) {
 
+      LOG.info("Comparing edgeIDs " + edge.getValue().getEdgeId() + " and " +
+               edgeId);
       if (edge.getValue().getEdgeId() == edgeId) {
         return edge;
       }
     }
 
-    return null;
+    throw new IllegalArgumentException("Couldn't find edge with the id " +
+                                       edgeId + " from the vertex " +
+                                       extractVertexId(edgeId) + " - current " +
+                                       "vertex is " +
+                                       super.vertex.getId().get());
   }
 
   /**

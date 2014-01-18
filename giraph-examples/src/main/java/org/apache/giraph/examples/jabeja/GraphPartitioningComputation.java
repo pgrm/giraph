@@ -39,7 +39,7 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
   BasicComputation<LongWritable, V, E, M> {
   /** logger */
   protected static final Logger LOG =
-    Logger.getLogger(NodePartitioningComputation.class);
+    Logger.getLogger(GraphPartitioningComputation.class);
   /**
    * How many additional steps are performed during initialization.
    * There is only one additional step during the initialization,
@@ -73,6 +73,7 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
     // reset the random generator in the beginning so that it will be
     // recreated for every step and vertex
     this.randomGenerator = null;
+    this.temperature = null;
 
     if (this.conf == null) {
       this.conf = new JaBeJaConfigurations(getConf());
@@ -330,6 +331,9 @@ public abstract class GraphPartitioningComputation<V extends VertexData,
 
       temperature =
         Math.pow(temperaturePreserving, rounds) * initialTemperature;
+    }
+    if (temperature < 1) {
+      return 1;
     }
     return temperature;
   }
